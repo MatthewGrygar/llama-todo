@@ -440,7 +440,8 @@ export default function App() {
     ? Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(calDate), i))
     : calMode === "day" ? [calDate] : [];
 
-  const headerCols = calMode === "week" ? "56px repeat(7, 1fr)" : "56px 1fr";
+  // fixed col widths so week view scrolls horizontally on mobile
+  const calGridCols = calMode === "week" ? "40px repeat(7, 58px)" : "40px 1fr";
   const today = startOfDay(new Date());
 
   /* ── month render ── */
@@ -541,7 +542,7 @@ export default function App() {
 
             {/* ══ CALENDAR VIEW ══ */}
             <section className={`view${view === "calendar" ? " active" : ""}`}>
-              <div className="cal-toolbar">
+              <div className="cal-bar">
                 <div className="cal-nav">
                   <button className="nav-btn" onClick={calPrev} aria-label="Previous">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
@@ -553,35 +554,30 @@ export default function App() {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
                   </button>
                 </div>
-                <div className="cal-title">
-                  <h2>{calTitle()}</h2>
-                  <p>{calSubtitle()}</p>
+                <h2 className="cal-bar-title">{calTitle()}</h2>
+                <div className="cal-modes" role="tablist">
+                  {(["day", "week", "month"] as CalMode[]).map(m => (
+                    <button key={m} className={calMode === m ? "active" : ""} onClick={() => setCalMode(m)} role="tab">
+                      {m === "day" ? "Den" : m === "week" ? "Týd" : "Měs"}
+                    </button>
+                  ))}
                 </div>
-                <div style={{ width: 108 }} />
-              </div>
-
-              <div className="toggle-group" role="tablist">
-                {(["day", "week", "month"] as CalMode[]).map(m => (
-                  <button key={m} className={calMode === m ? "active" : ""} onClick={() => setCalMode(m)} role="tab">
-                    {m === "day" ? "Den" : m === "week" ? "Týden" : "Měsíc"}
-                  </button>
-                ))}
               </div>
 
               <div className="cal-scroll" ref={calScrollRef}>
                 {/* Day / Week */}
                 {calMode !== "month" && (
                   <>
-                    <div className="day-header-row" style={{ gridTemplateColumns: headerCols }}>
-                      <div />
+                    <div className="day-header-row" style={{ gridTemplateColumns: calGridCols }}>
+                      <div className="time-corner" />
                       {calDays.map((d, i) => (
-                        <div key={i} className={`day-header${sameDate(d, today) ? " today" : ""}`}>
+                        <div key={i} className={`day-header${sameDate(d, today) ? " today" : ""}`} onClick={() => { setCalDate(startOfDay(d)); setCalMode("day"); }}>
                           {d.toLocaleDateString(undefined, { weekday: "short" })}
                           <span className="dnum">{d.getDate()}</span>
                         </div>
                       ))}
                     </div>
-                    <div className="grid-wrap" style={{ gridTemplateColumns: headerCols }}>
+                    <div className="grid-wrap" style={{ gridTemplateColumns: calGridCols }}>
                       {/* time col */}
                       <div className="time-col">
                         {HOURS.map(h => (
@@ -594,7 +590,7 @@ export default function App() {
                         const isToday = sameDate(day, today);
                         const nowTop = (nowMinute / 60) * 48;
                         return (
-                          <div key={di} className="day-col">
+                          <div key={di} className={`day-col${isToday ? " today-col" : ""}`}>
                             {HOURS.map(h => (
                               <div key={h} className="hour-cell" onClick={() => openCreateEvent(day, h)} />
                             ))}
@@ -638,16 +634,11 @@ export default function App() {
                             onClick={() => { setCalDate(startOfDay(d)); setCalMode("day"); }}
                           >
                             <div className="mday">{d.getDate()}</div>
-                            <div className="mevents">
+                            <div className="mdots">
                               {dayEvents.slice(0, 3).map(ev => {
                                 const color = COLORS.find(c => c.id === ev.color) || COLORS[0];
-                                return (
-                                  <div key={ev.id} className="mchip" style={{ background: color.bg }}>
-                                    {ev.title}
-                                  </div>
-                                );
+                                return <div key={ev.id} className="mdot" style={{ background: color.bg }} />;
                               })}
-                              {dayEvents.length > 3 && <div className="mmore">+{dayEvents.length - 3}</div>}
                             </div>
                           </div>
                         );

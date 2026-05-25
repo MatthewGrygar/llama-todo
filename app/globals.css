@@ -328,33 +328,35 @@ main { flex: 1; overflow: hidden; position: relative; }
 }
 
 /* ─── Calendar ─── */
-.cal-toolbar {
-  padding: 2px 16px 10px;
-  display: flex; align-items: center; gap: 8px;
+.cal-bar {
+  padding: 2px 12px 8px;
+  display: flex; align-items: center; gap: 6px;
 }
-.cal-nav { display: flex; align-items: center; gap: 5px; }
+.cal-nav { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .nav-btn {
-  width: 32px; height: 32px; border-radius: 50%;
+  width: 30px; height: 30px; border-radius: 50%;
   background: var(--white); display: grid; place-items: center;
   color: var(--purple-deep); box-shadow: var(--shadow);
   transition: transform .1s;
 }
 .nav-btn:active { transform: scale(.88); }
-.nav-btn svg { width: 13px; height: 13px; }
-.cal-title { flex: 1; text-align: center; }
-.cal-title h2 { margin: 0; font-size: 15px; font-weight: 700; color: var(--plum); }
-.cal-title p  { margin: 1px 0 0; font-size: 10px; color: var(--purple); font-weight: 500; }
+.nav-btn svg { width: 12px; height: 12px; }
+.cal-bar-title {
+  flex: 1; margin: 0;
+  font-size: 14px; font-weight: 700; color: var(--plum);
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
-.toggle-group {
+.cal-modes {
   display: flex; background: var(--lav-200); border-radius: 999px;
-  padding: 3px; margin: 0 16px 12px; gap: 2px;
+  padding: 2px; gap: 1px; flex-shrink: 0;
 }
-.toggle-group button {
-  flex: 1; padding: 7px 12px; border-radius: 999px;
-  font-size: 12px; font-weight: 600; color: var(--purple-deep);
-  transition: background .18s, color .18s, box-shadow .18s; min-height: 32px;
+.cal-modes button {
+  padding: 5px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; color: var(--purple-deep);
+  transition: background .18s, color .18s, box-shadow .18s; min-height: 28px;
 }
-.toggle-group button.active {
+.cal-modes button.active {
   background: var(--white); color: var(--plum);
   box-shadow: 0 2px 6px -2px rgba(91,58,140,.22);
 }
@@ -388,7 +390,15 @@ main { flex: 1; overflow: hidden; position: relative; }
 }
 
 .grid-wrap { display: grid; position: relative; }
-.time-col { border-right: 1px solid var(--lav-200); }
+.time-col {
+  position: sticky; left: 0; z-index: 2;
+  background: var(--lav-50);
+  border-right: 1px solid var(--lav-200);
+}
+.time-corner {
+  position: sticky; left: 0; z-index: 4;
+  background: var(--lav-50);
+}
 .hour-label {
   height: 48px; font-size: 10px; color: var(--purple);
   text-align: right; padding-right: 8px; transform: translateY(-7px);
@@ -396,6 +406,9 @@ main { flex: 1; overflow: hidden; position: relative; }
 }
 .day-col { border-right: 1px solid rgba(140,95,191,.09); position: relative; }
 .day-col:last-child { border-right: none; }
+.day-col.today-col { background: rgba(140,95,191,.04); }
+.day-header { cursor: pointer; transition: background .13s; border-radius: 8px; }
+.day-header:hover { background: rgba(196,166,242,.18); }
 .hour-cell {
   height: 48px; border-bottom: 1px solid rgba(140,95,191,.09);
   cursor: pointer; transition: background .13s; position: relative;
@@ -445,11 +458,11 @@ main { flex: 1; overflow: hidden; position: relative; }
 }
 .month-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; }
 .month-cell {
-  aspect-ratio: 1/1.05; background: var(--white);
+  aspect-ratio: 1/1; background: var(--white);
   border: 1px solid var(--lav-200); border-radius: 10px;
-  padding: 4px 4px 3px; display: flex; flex-direction: column;
+  padding: 5px 4px 4px; display: flex; flex-direction: column;
   cursor: pointer; overflow: hidden;
-  transition: border-color .12s, box-shadow .12s; min-height: 52px;
+  transition: border-color .12s, box-shadow .12s;
 }
 .month-cell:hover { border-color: var(--purple); box-shadow: var(--shadow); }
 .month-cell.other-month { opacity: .35; background: transparent; }
@@ -460,15 +473,8 @@ main { flex: 1; overflow: hidden; position: relative; }
   width: 18px; height: 18px; border-radius: 50%;
   display: inline-grid; place-items: center; margin-left: auto; font-size: 10px;
 }
-.month-cell .mevents { flex: 1; display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
-.month-cell .mchip {
-  font-size: 8px; font-weight: 600; padding: 1px 3px; border-radius: 3px;
-  color: rgba(63,42,102,.85); line-height: 1.15;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.month-cell .mmore { font-size: 8px; font-weight: 600; color: var(--purple); padding: 0 3px; }
-.month-cell .mdots { display: flex; gap: 2px; justify-content: flex-end; margin-top: 2px; }
-.month-cell .mdot  { width: 4px; height: 4px; border-radius: 50%; }
+.month-cell .mdots { flex: 1; display: flex; gap: 2px; align-items: flex-end; flex-wrap: wrap; }
+.month-cell .mdot  { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(91,58,140,.12); }
 
 /* ─── Tab bar + FAB ─── */
 nav.tabbar {
