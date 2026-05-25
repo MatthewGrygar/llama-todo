@@ -405,6 +405,16 @@ export default function App() {
     return "Měsíční přehled";
   }
 
+  /* ── fab action ── */
+  function fabAction() {
+    if (view === "tasks") {
+      openCreateTask();
+    } else {
+      const now = new Date();
+      openCreateEvent(startOfDay(now), now.getHours());
+    }
+  }
+
   /* ── calendar nav ── */
   function calPrev() {
     if (calMode === "month") setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1));
@@ -484,10 +494,6 @@ export default function App() {
               <div className="tasks-toolbar">
                 <h2>Moje poznámky</h2>
                 <span className="count">{tasks.length}</span>
-                <button className="add-fab" onClick={openCreateTask}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                  Nová
-                </button>
               </div>
 
               <div className="task-filter" role="tablist">
@@ -658,6 +664,9 @@ export default function App() {
             <button className={`tab${view === "tasks" ? " active" : ""}`} onClick={() => setView("tasks")}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9h8M8 13h5M8 17h7"/></svg>
               Poznámky
+            </button>
+            <button className="tab-fab" onClick={fabAction} aria-label="Přidat">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
             </button>
             <button className={`tab${view === "calendar" ? " active" : ""}`} onClick={() => setView("calendar")}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
