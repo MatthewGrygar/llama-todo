@@ -210,7 +210,7 @@ export default function App() {
   const [events, setEventsRaw] = useState<CalEvent[]>([]);
   const [view, setView] = useState<"tasks" | "calendar">("tasks");
   const [taskFilter, setTaskFilter] = useState<"all" | Col>("all");
-  const [calMode, setCalMode] = useState<CalMode>("week");
+  const [calMode, setCalMode] = useState<CalMode>("month");
   const [calDate, setCalDate] = useState<Date>(() => startOfDay(new Date()));
   const [greeting, setGreeting] = useState("Pohodově a produktivně ✨");
 
@@ -466,6 +466,14 @@ export default function App() {
     if (calMode === "day") return calDate.toLocaleDateString("cs-CZ", { weekday: "long", day: "numeric", month: "long" });
     return calDate.toLocaleDateString("cs-CZ", { month: "long", year: "numeric" });
   }
+  function calSubtitle() {
+    if (calMode === "month") return "Měsíční přehled";
+    if (calMode === "week") {
+      const s = startOfWeek(calDate);
+      return `Týden od ${s.toLocaleDateString("cs-CZ", { day: "numeric", month: "short" })}`;
+    }
+    return calDate.toLocaleDateString("cs-CZ", { day: "numeric", month: "long", year: "numeric" });
+  }
 
   /* ── fab action ── */
   function fabAction() {
@@ -629,11 +637,14 @@ export default function App() {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
                   </button>
                 </div>
-                <h2 className="cal-bar-title">{calTitle()}</h2>
+                <div className="cal-title-group">
+                  <h2 className="cal-bar-title">{calTitle()}</h2>
+                  <p className="cal-bar-sub">{calSubtitle()}</p>
+                </div>
                 <div className="cal-modes" role="tablist">
                   {(["day", "week", "month"] as CalMode[]).map(m => (
                     <button key={m} className={calMode === m ? "active" : ""} onClick={() => setCalMode(m)} role="tab">
-                      {m === "day" ? "Den" : m === "week" ? "Týd" : "Měs"}
+                      {m === "day" ? "Den" : m === "week" ? "Týden" : "Měsíc"}
                     </button>
                   ))}
                 </div>
@@ -786,19 +797,38 @@ export default function App() {
             </section>
           </main>
 
-          {/* ══ TAB BAR ══ */}
+          {/* ══ TAB BAR / DESKTOP SIDEBAR ══ */}
           <nav className="tabbar">
+            {/* Desktop sidebar branding */}
+            <div className="sidebar-top">
+              <div className="sidebar-mascot" aria-hidden="true">🦙</div>
+              <div className="sidebar-brand-text">
+                <span className="sidebar-title">Lama To-Do</span>
+                <span className="sidebar-greeting">{greeting}</span>
+              </div>
+            </div>
+
+            {/* FAB — circular on mobile, full-width on desktop */}
+            <button className="tab-fab" onClick={fabAction} aria-label="Přidat">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              <span className="fab-label">{view === "tasks" ? "Nový úkol" : "Nová událost"}</span>
+            </button>
+
+            {/* Nav */}
             <button className={`tab${view === "tasks" ? " active" : ""}`} onClick={() => setView("tasks")}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9h8M8 13h5M8 17h7"/></svg>
               Poznámky
-            </button>
-            <button className="tab-fab" onClick={fabAction} aria-label="Přidat">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
             </button>
             <button className={`tab${view === "calendar" ? " active" : ""}`} onClick={() => setView("calendar")}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
               Kalendář
             </button>
+
+            {/* Desktop sidebar bottom hint */}
+            <div className="sidebar-hint">
+              <span className="sidebar-hint-icon">🦙</span>
+              <span>Úkoly s termínem se automaticky objeví v kalendáři.</span>
+            </div>
           </nav>
         </div>
       </div>
