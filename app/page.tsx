@@ -12,6 +12,7 @@ interface Task {
   title: string;
   note: string;
   due: string;
+  time: string;        // HH:MM or ""
   col: Col;
   color: Color;
   starred: boolean;
@@ -27,6 +28,13 @@ interface CalEvent {
   color: Color;
 }
 
+interface ReminderAlert {
+  id: string;
+  title: string;
+  type: "task" | "event";
+  minutesLeft: number;
+}
+
 /* ─────────────────────────── constants ─────────────────────── */
 const COLS: { id: Col; label: string; short: string; dot: string }[] = [
   { id: "todo",  label: "To Do 📋",       short: "To Do",       dot: "#C4A6F2" },
@@ -34,13 +42,13 @@ const COLS: { id: Col; label: string; short: string; dot: string }[] = [
   { id: "done",  label: "Done ✅",         short: "Done",        dot: "#A6E3C7" },
 ];
 
-const COLORS: { id: Color; bg: string; name: string }[] = [
-  { id: "lilac", bg: "#E8DCFF", name: "Lila" },
-  { id: "pink",  bg: "#FFD6EC", name: "Lamí růžová" },
-  { id: "mint",  bg: "#CDF0DD", name: "Kaktusová mint" },
-  { id: "peach", bg: "#FFE0C4", name: "Broskvová" },
-  { id: "sky",   bg: "#C9E1FF", name: "Oblačná modrá" },
-  { id: "lemon", bg: "#FFEBA0", name: "Citronová" },
+const COLORS: { id: Color; bg: string; border: string; name: string }[] = [
+  { id: "lilac", bg: "#E8DCFF", border: "#C4A6F2", name: "Lila" },
+  { id: "pink",  bg: "#FFD6EC", border: "#F6B8E0", name: "Lamí růžová" },
+  { id: "mint",  bg: "#CDF0DD", border: "#9ADCBD", name: "Kaktusová mint" },
+  { id: "peach", bg: "#FFE0C4", border: "#FFBF8A", name: "Broskvová" },
+  { id: "sky",   bg: "#C9E1FF", border: "#8FC3FF", name: "Oblačná modrá" },
+  { id: "lemon", bg: "#FFEBA0", border: "#FFD84D", name: "Citronová" },
 ];
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -86,16 +94,18 @@ function hourToTimeStr(h: number) {
   const mm = Math.round((h - hh) * 60);
   return `${pad2(hh)}:${pad2(mm)}`;
 }
-function friendlyDate(iso: string) {
+function friendlyDate(iso: string, time?: string) {
   if (!iso) return "";
   const d = new Date(iso + "T00:00:00");
   const today = startOfDay(new Date());
   const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Tomorrow";
-  if (diff === -1) return "Yesterday";
-  if (diff > 0 && diff < 7) return d.toLocaleDateString(undefined, { weekday: "long" });
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  let label = "";
+  if (diff === 0) label = "Dnes";
+  else if (diff === 1) label = "Zítra";
+  else if (diff === -1) label = "Včera";
+  else if (diff > 0 && diff < 7) label = d.toLocaleDateString("cs-CZ", { weekday: "long" });
+  else label = d.toLocaleDateString("cs-CZ", { month: "short", day: "numeric" });
+  return time ? `${label} ${time}` : label;
 }
 
 function loadStorage<T>(key: string, fallback: T): T {
@@ -109,6 +119,10 @@ function saveStorage<T>(key: string, v: T) {
   if (typeof window !== "undefined") localStorage.setItem(key, JSON.stringify(v));
 }
 
+function colorOf(id: Color) {
+  return COLORS.find(c => c.id === id) || COLORS[0];
+}
+
 function seedTasks(): Task[] {
   const today = new Date();
   const inDays = (d: number) => {
@@ -116,11 +130,11 @@ function seedTasks(): Task[] {
     return x.toISOString().slice(0, 10);
   };
   return [
-    { id: uid(), title: "Učesat lamu 🦙",       note: "Tentokrát použít jemný kartáč — minule jí to docela cuchalo.", due: inDays(0),  col: "todo",  color: "lilac", starred: true,  created: Date.now() - 3e5 },
-    { id: uid(), title: "Najít nové ovesné seno", note: "",                                                                  due: inDays(2),  col: "todo",  color: "peach", starred: false, created: Date.now() - 2e5 },
-    { id: uid(), title: "Sticker pack design",    note: "4 samolepky pro launch:\n• lama s kafe\n• lama na józe\n• lama ve sněhu\n• lama čte knihu", due: inDays(1), col: "doing", color: "pink", starred: false, created: Date.now() - 1e5 },
-    { id: uid(), title: "Odepsat Lile",           note: "Ohledně výletu na louku příští sobotu",                            due: "",         col: "doing", color: "sky",   starred: false, created: Date.now() - 9e4 },
-    { id: uid(), title: "Zastříhnout kopýtka",    note: "",                                                                  due: inDays(-1), col: "done",  color: "mint",  starred: false, created: Date.now() - 2e6 },
+    { id: uid(), title: "Učesat lamu 🦙", note: "Tentokrát použít jemný kartáč — minule jí to docela cuchalo.", due: inDays(0), time: "10:00", col: "todo",  color: "lilac", starred: true,  created: Date.now() - 3e5 },
+    { id: uid(), title: "Najít nové ovesné seno", note: "", due: inDays(2), time: "", col: "todo",  color: "peach", starred: false, created: Date.now() - 2e5 },
+    { id: uid(), title: "Sticker pack design", note: "4 samolepky pro launch:\n• lama s kafe\n• lama na józe\n• lama ve sněhu\n• lama čte knihu", due: inDays(1), time: "14:00", col: "doing", color: "pink",  starred: false, created: Date.now() - 1e5 },
+    { id: uid(), title: "Odepsat Lile", note: "Ohledně výletu na louku příští sobotu", due: "", time: "", col: "doing", color: "sky",   starred: false, created: Date.now() - 9e4 },
+    { id: uid(), title: "Zastříhnout kopýtka", note: "", due: inDays(-1), time: "", col: "done",  color: "mint",  starred: false, created: Date.now() - 2e6 },
   ];
 }
 
@@ -178,7 +192,7 @@ function ColorSwatches({ selected, onChange }: { selected: Color; onChange: (c: 
         <button
           key={c.id}
           type="button"
-          style={{ background: c.bg }}
+          style={{ background: c.bg, outline: selected === c.id ? `2px solid ${c.border}` : "none", outlineOffset: "2px" }}
           aria-label={c.name}
           title={c.name}
           className={selected === c.id ? "active" : ""}
@@ -206,6 +220,7 @@ export default function App() {
   const [tTitle, setTTitle] = useState("");
   const [tNote, setTNote] = useState("");
   const [tDue, setTDue] = useState("");
+  const [tTime, setTTime] = useState("");
   const [tColor, setTColor] = useState<Color>("lilac");
   const [tStarred, setTStarred] = useState(false);
   const taskTitleRef = useRef<HTMLInputElement>(null);
@@ -229,6 +244,10 @@ export default function App() {
   /* drag state */
   const dragId = useRef<string | null>(null);
 
+  /* reminder */
+  const [reminder, setReminder] = useState<ReminderAlert | null>(null);
+  const notifiedRef = useRef<Set<string>>(new Set());
+
   /* ── init ── */
   useEffect(() => {
     const stored = loadStorage<Task[] | null>("llama.tasks.v1", null);
@@ -241,6 +260,7 @@ export default function App() {
         ...t,
         color: t.color || "lilac" as Color,
         starred: t.starred ?? false,
+        time: t.time ?? "",
       }));
       setTasksRaw(migrated);
     }
@@ -262,7 +282,60 @@ export default function App() {
       h < 21 ? "Pohodový večer 🌸" :
                "Čas se zklidnit 🌙"
     );
+
+    /* request notification permission */
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
   }, []);
+
+  /* ── reminder check ── */
+  useEffect(() => {
+    const check = () => {
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const todayStr = ymd(startOfDay(now));
+      const bucket = Math.floor(nowMin / 5);
+
+      for (const ev of events) {
+        if (ev.date === todayStr) {
+          const evMin = ev.start * 60;
+          const diff = evMin - nowMin;
+          const key = `ev-${ev.id}-${bucket}`;
+          if (diff > 0 && diff <= 30 && !notifiedRef.current.has(key)) {
+            notifiedRef.current.add(key);
+            const alert: ReminderAlert = { id: key, title: ev.title, type: "event", minutesLeft: Math.round(diff) };
+            setReminder(alert);
+            if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+              new Notification(`⏰ Za ${Math.round(diff)} min: ${ev.title}`, { body: "Lama To-Do připomínka" });
+            }
+          }
+        }
+      }
+
+      for (const t of tasks) {
+        if (t.due === todayStr && t.time && t.col !== "done") {
+          const taskHour = parseTimeToHour(t.time);
+          if (taskHour == null) continue;
+          const taskMin = taskHour * 60;
+          const diff = taskMin - nowMin;
+          const key = `task-${t.id}-${bucket}`;
+          if (diff > 0 && diff <= 30 && !notifiedRef.current.has(key)) {
+            notifiedRef.current.add(key);
+            const alert: ReminderAlert = { id: key, title: t.title, type: "task", minutesLeft: Math.round(diff) };
+            setReminder(alert);
+            if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+              new Notification(`⏰ Za ${Math.round(diff)} min: ${t.title}`, { body: "Lama To-Do připomínka" });
+            }
+          }
+        }
+      }
+    };
+
+    check();
+    const t = setInterval(check, 60000);
+    return () => clearInterval(t);
+  }, [events, tasks]);
 
   /* ── persistence helpers ── */
   const setTasks = useCallback((fn: (prev: Task[]) => Task[]) => {
@@ -287,13 +360,13 @@ export default function App() {
   /* ── task modal actions ── */
   function openCreateTask() {
     setEditingTaskId(null);
-    setTTitle(""); setTNote(""); setTDue(""); setTColor("lilac"); setTStarred(false);
+    setTTitle(""); setTNote(""); setTDue(""); setTTime(""); setTColor("lilac"); setTStarred(false);
     setTaskModal(true);
     setTimeout(() => taskTitleRef.current?.focus(), 250);
   }
   function openEditTask(t: Task) {
     setEditingTaskId(t.id);
-    setTTitle(t.title); setTNote(t.note); setTDue(t.due); setTColor(t.color); setTStarred(t.starred);
+    setTTitle(t.title); setTNote(t.note); setTDue(t.due); setTTime(t.time ?? ""); setTColor(t.color); setTStarred(t.starred);
     setTaskModal(true);
     setTimeout(() => taskTitleRef.current?.focus(), 250);
   }
@@ -302,12 +375,12 @@ export default function App() {
     if (!title) { taskTitleRef.current?.focus(); return; }
     if (editingTaskId) {
       setTasks(prev => prev.map(t => t.id === editingTaskId
-        ? { ...t, title, note: tNote.trim(), due: tDue, color: tColor, starred: tStarred }
+        ? { ...t, title, note: tNote.trim(), due: tDue, time: tTime, color: tColor, starred: tStarred }
         : t
       ));
     } else {
       setTasks(prev => [...prev, {
-        id: uid(), title, note: tNote.trim(), due: tDue,
+        id: uid(), title, note: tNote.trim(), due: tDue, time: tTime,
         col: "todo", color: tColor, starred: tStarred, created: Date.now()
       }]);
     }
@@ -315,10 +388,7 @@ export default function App() {
   }
 
   /* ── move ── */
-  function openMoveSheet(id: string) {
-    setMovingTaskId(id);
-    setMoveModal(true);
-  }
+  function openMoveSheet(id: string) { setMovingTaskId(id); setMoveModal(true); }
   function moveTask(id: string, col: Col) {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, col } : t));
     setMoveModal(false);
@@ -337,7 +407,7 @@ export default function App() {
     setEvEnd(hourToTimeStr(Math.min(hour + 1, 23.99)));
     setEvColor("lilac");
     setEvModalSub(
-      `${day.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })} · začátek ${fmtHour(hour)}`
+      `${day.toLocaleDateString("cs-CZ", { weekday: "long", month: "short", day: "numeric" })} · začátek ${fmtHour(hour)}`
     );
     setEventModal(true);
     setTimeout(() => eventTitleRef.current?.focus(), 250);
@@ -351,7 +421,7 @@ export default function App() {
     setEvEnd(hourToTimeStr(ev.end));
     setEvColor(ev.color);
     const d = new Date(ev.date + "T00:00:00");
-    setEvModalSub(d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }));
+    setEvModalSub(d.toLocaleDateString("cs-CZ", { weekday: "long", month: "short", day: "numeric" }));
     setEventModal(true);
   }
   function saveEvent() {
@@ -390,19 +460,11 @@ export default function App() {
       const s = startOfWeek(calDate);
       const e = addDays(s, 6);
       return s.getMonth() === e.getMonth()
-        ? s.toLocaleDateString(undefined, { month: "long", year: "numeric" })
-        : `${s.toLocaleDateString(undefined, { month: "short" })} – ${e.toLocaleDateString(undefined, { month: "short", year: "numeric" })}`;
+        ? s.toLocaleDateString("cs-CZ", { month: "long", year: "numeric" })
+        : `${s.toLocaleDateString("cs-CZ", { month: "short" })} – ${e.toLocaleDateString("cs-CZ", { month: "short", year: "numeric" })}`;
     }
-    if (calMode === "day") return calDate.toLocaleDateString(undefined, { weekday: "long" });
-    return calDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-  }
-  function calSubtitle() {
-    if (calMode === "week") {
-      const s = startOfWeek(calDate);
-      return `Týden od ${s.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
-    }
-    if (calMode === "day") return calDate.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
-    return "Měsíční přehled";
+    if (calMode === "day") return calDate.toLocaleDateString("cs-CZ", { weekday: "long", day: "numeric", month: "long" });
+    return calDate.toLocaleDateString("cs-CZ", { month: "long", year: "numeric" });
   }
 
   /* ── fab action ── */
@@ -440,8 +502,9 @@ export default function App() {
     ? Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(calDate), i))
     : calMode === "day" ? [calDate] : [];
 
-  // fixed col widths so week view scrolls horizontally on mobile
-  const calGridCols = calMode === "week" ? "40px repeat(7, 58px)" : "40px 1fr";
+  const calGridCols = calMode === "week"
+    ? "44px repeat(7, minmax(80px, 1fr))"
+    : "44px 1fr";
   const today = startOfDay(new Date());
 
   /* ── month render ── */
@@ -457,7 +520,7 @@ export default function App() {
       const now = new Date();
       const showing = calDays.some(d => sameDate(d, now));
       const targetHour = showing ? Math.max(0, now.getHours() - 1) : 7;
-      calScrollRef.current.scrollTop = targetHour * 48;
+      calScrollRef.current.scrollTop = targetHour * 52;
     }
   }, [view, calMode, calDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -532,7 +595,19 @@ export default function App() {
                           <div className="empty-col">
                             {col.id === "todo" ? "Žádné úkoly — přidej nějaký!" : col.id === "doing" ? "Teď nic neběží" : "Zatím nic hotového"}
                           </div>
-                        ) : items.map(t => <TaskCard key={t.id} task={t} onStar={() => setTasks(prev => prev.map(x => x.id === t.id ? { ...x, starred: !x.starred } : x))} onDelete={() => setTasks(prev => prev.filter(x => x.id !== t.id))} onMovePrev={() => { const ci = COLS.findIndex(c => c.id === t.col); if (ci > 0) moveTaskDirect(t.id, COLS[ci-1].id); }} onMoveNext={() => { const ci = COLS.findIndex(c => c.id === t.col); if (ci < COLS.length - 1) moveTaskDirect(t.id, COLS[ci+1].id); }} onDragStart={() => handleDragStart(t.id)} onMoveSheet={() => openMoveSheet(t.id)} onEdit={() => openEditTask(t)} />)}
+                        ) : items.map(t => (
+                          <TaskCard
+                            key={t.id}
+                            task={t}
+                            onStar={() => setTasks(prev => prev.map(x => x.id === t.id ? { ...x, starred: !x.starred } : x))}
+                            onDelete={() => setTasks(prev => prev.filter(x => x.id !== t.id))}
+                            onMovePrev={() => { const ci = COLS.findIndex(c => c.id === t.col); if (ci > 0) moveTaskDirect(t.id, COLS[ci-1].id); }}
+                            onMoveNext={() => { const ci = COLS.findIndex(c => c.id === t.col); if (ci < COLS.length - 1) moveTaskDirect(t.id, COLS[ci+1].id); }}
+                            onDragStart={() => handleDragStart(t.id)}
+                            onMoveSheet={() => openMoveSheet(t.id)}
+                            onEdit={() => openEditTask(t)}
+                          />
+                        ))}
                       </div>
                     </div>
                   );
@@ -544,13 +619,13 @@ export default function App() {
             <section className={`view${view === "calendar" ? " active" : ""}`}>
               <div className="cal-bar">
                 <div className="cal-nav">
-                  <button className="nav-btn" onClick={calPrev} aria-label="Previous">
+                  <button className="nav-btn" onClick={calPrev} aria-label="Předchozí">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
                   </button>
-                  <button className="nav-btn" onClick={() => setCalDate(startOfDay(new Date()))} aria-label="Today">
+                  <button className="nav-btn" onClick={() => setCalDate(startOfDay(new Date()))} aria-label="Dnes">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/></svg>
                   </button>
-                  <button className="nav-btn" onClick={calNext} aria-label="Next">
+                  <button className="nav-btn" onClick={calNext} aria-label="Další">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
                   </button>
                 </div>
@@ -568,15 +643,40 @@ export default function App() {
                 {/* Day / Week */}
                 {calMode !== "month" && (
                   <>
+                    {/* Day headers */}
                     <div className="day-header-row" style={{ gridTemplateColumns: calGridCols }}>
                       <div className="time-corner" />
                       {calDays.map((d, i) => (
                         <div key={i} className={`day-header${sameDate(d, today) ? " today" : ""}`} onClick={() => { setCalDate(startOfDay(d)); setCalMode("day"); }}>
-                          {d.toLocaleDateString(undefined, { weekday: "short" })}
-                          <span className="dnum">{d.getDate()}</span>
+                          <span className="dwday">{d.toLocaleDateString("cs-CZ", { weekday: "short" })}</span>
+                          <span className={`dnum${sameDate(d, today) ? " today" : ""}`}>{d.getDate()}</span>
                         </div>
                       ))}
                     </div>
+
+                    {/* All-day tasks row */}
+                    {calDays.some(d => tasks.some(t => t.due === ymd(d) && !t.time && t.col !== "done")) && (
+                      <div className="allday-row" style={{ gridTemplateColumns: calGridCols }}>
+                        <div className="allday-label">Celý den</div>
+                        {calDays.map((d, di) => {
+                          const allDayTasks = tasks.filter(t => t.due === ymd(d) && !t.time && t.col !== "done");
+                          return (
+                            <div key={di} className="allday-col">
+                              {allDayTasks.map(t => {
+                                const c = colorOf(t.color);
+                                return (
+                                  <div key={t.id} className="allday-task" style={{ background: c.bg, borderLeft: `3px solid ${c.border}` }} onClick={() => openEditTask(t)}>
+                                    ✓ {t.title}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Time grid */}
                     <div className="grid-wrap" style={{ gridTemplateColumns: calGridCols }}>
                       {/* time col */}
                       <div className="time-col">
@@ -587,27 +687,48 @@ export default function App() {
                       {/* day cols */}
                       {calDays.map((day, di) => {
                         const dayEvents = events.filter(ev => ev.date === ymd(day));
+                        const dayTasks = tasks.filter(t => t.due === ymd(day) && t.time && t.col !== "done");
                         const isToday = sameDate(day, today);
-                        const nowTop = (nowMinute / 60) * 48;
+                        const nowTop = (nowMinute / 60) * 52;
                         return (
                           <div key={di} className={`day-col${isToday ? " today-col" : ""}`}>
                             {HOURS.map(h => (
                               <div key={h} className="hour-cell" onClick={() => openCreateEvent(day, h)} />
                             ))}
+
+                            {/* calendar events */}
                             {dayEvents.map(ev => {
-                              const color = COLORS.find(c => c.id === ev.color) || COLORS[0];
+                              const c = colorOf(ev.color);
                               return (
                                 <div
                                   key={ev.id}
                                   className="event"
-                                  style={{ background: color.bg, top: ev.start * 48, height: Math.max((ev.end - ev.start) * 48 - 2, 24) }}
+                                  style={{ background: c.bg, borderLeft: `3px solid ${c.border}`, top: ev.start * 52, height: Math.max((ev.end - ev.start) * 52 - 2, 24) }}
                                   onClick={e => { e.stopPropagation(); openEditEvent(ev); }}
                                 >
-                                  {ev.title}
-                                  <div className="ev-time">{fmtHourShort(ev.start)}–{fmtHourShort(ev.end)}</div>
+                                  <span className="ev-title">{ev.title}</span>
+                                  <span className="ev-time">{fmtHourShort(ev.start)}–{fmtHourShort(ev.end)}</span>
                                 </div>
                               );
                             })}
+
+                            {/* tasks with time */}
+                            {dayTasks.map(t => {
+                              const hour = parseTimeToHour(t.time) ?? 9;
+                              const c = colorOf(t.color);
+                              return (
+                                <div
+                                  key={t.id}
+                                  className="event task-block"
+                                  style={{ background: c.bg, borderLeft: `3px solid ${c.border}`, top: hour * 52, height: 48 }}
+                                  onClick={e => { e.stopPropagation(); openEditTask(t); }}
+                                >
+                                  <span className="ev-title">✓ {t.title}</span>
+                                  <span className="ev-time">{t.time}</span>
+                                </div>
+                              );
+                            })}
+
                             {isToday && <div className="now-line" style={{ top: nowTop }} />}
                           </div>
                         );
@@ -624,9 +745,17 @@ export default function App() {
                     </div>
                     <div className="month-grid">
                       {monthCells.map((d, i) => {
-                        const dayEvents = events.filter(ev => ev.date === ymd(d));
+                        const dateStr = ymd(d);
+                        const dayEvents = events.filter(ev => ev.date === dateStr);
+                        const dayTasks = tasks.filter(t => t.due === dateStr && t.col !== "done");
                         const isOther = d.getMonth() !== calDate.getMonth();
                         const isToday2 = sameDate(d, today);
+                        const allItems = [
+                          ...dayTasks.map(t => ({ key: `t-${t.id}`, label: t.title, color: colorOf(t.color), isTask: true, obj: t })),
+                          ...dayEvents.map(ev => ({ key: `e-${ev.id}`, label: ev.title, color: colorOf(ev.color), isTask: false, obj: ev })),
+                        ];
+                        const visible = allItems.slice(0, 3);
+                        const overflow = allItems.length - visible.length;
                         return (
                           <div
                             key={i}
@@ -634,11 +763,18 @@ export default function App() {
                             onClick={() => { setCalDate(startOfDay(d)); setCalMode("day"); }}
                           >
                             <div className="mday">{d.getDate()}</div>
-                            <div className="mdots">
-                              {dayEvents.slice(0, 3).map(ev => {
-                                const color = COLORS.find(c => c.id === ev.color) || COLORS[0];
-                                return <div key={ev.id} className="mdot" style={{ background: color.bg }} />;
-                              })}
+                            <div className="mevents">
+                              {visible.map(item => (
+                                <div
+                                  key={item.key}
+                                  className="mchip"
+                                  style={{ background: item.color.bg, borderLeft: `2px solid ${item.color.border}` }}
+                                  onClick={e => { e.stopPropagation(); item.isTask ? openEditTask(item.obj as Task) : openEditEvent(item.obj as CalEvent); }}
+                                >
+                                  {item.isTask ? "✓ " : ""}{item.label}
+                                </div>
+                              ))}
+                              {overflow > 0 && <div className="mmore">+{overflow}</div>}
                             </div>
                           </div>
                         );
@@ -667,6 +803,20 @@ export default function App() {
         </div>
       </div>
 
+      {/* ══ REMINDER POPUP ══ */}
+      {reminder && (
+        <div className="reminder-popup" role="alert">
+          <div className="reminder-icon">⏰</div>
+          <div className="reminder-body">
+            <div className="reminder-title">{reminder.title}</div>
+            <div className="reminder-sub">
+              {reminder.type === "task" ? "Úkol" : "Událost"} · za {reminder.minutesLeft} min
+            </div>
+          </div>
+          <button className="reminder-close" onClick={() => setReminder(null)} aria-label="Zavřít">✕</button>
+        </div>
+      )}
+
       {/* ══ TASK MODAL ══ */}
       <div className={`scrim${taskModal ? " open" : ""}`} onClick={e => { if (e.target === e.currentTarget) setTaskModal(false); }}>
         <div className="sheet" role="dialog" aria-modal="true">
@@ -681,9 +831,15 @@ export default function App() {
             <label htmlFor="task-note">Poznámka (volitelné)</label>
             <textarea id="task-note" placeholder="Detaily, kontext, případně odkazy…" maxLength={500} value={tNote} onChange={e => setTNote(e.target.value)} />
           </div>
-          <div className="field">
-            <label htmlFor="task-due">Datum (volitelné)</label>
-            <input id="task-due" type="date" value={tDue} onChange={e => setTDue(e.target.value)} />
+          <div className="field field-row">
+            <div className="field-sub">
+              <label htmlFor="task-due">Datum</label>
+              <input id="task-due" type="date" value={tDue} onChange={e => setTDue(e.target.value)} />
+            </div>
+            <div className="field-sub">
+              <label htmlFor="task-time">Čas{!tDue && <span className="field-hint"> (vyber datum)</span>}</label>
+              <input id="task-time" type="time" value={tTime} disabled={!tDue} onChange={e => setTTime(e.target.value)} />
+            </div>
           </div>
           <div className="field">
             <label>Barva</label>
@@ -782,7 +938,7 @@ function TaskCard({
     const d = new Date(task.due + "T00:00:00");
     const diff = Math.round((d.getTime() - startOfDay(new Date()).getTime()) / 86400000);
     dueClass = task.col !== "done" && diff < 0 ? "overdue" : task.col !== "done" && diff === 0 ? "today" : "";
-    dueLabel = friendlyDate(task.due);
+    dueLabel = friendlyDate(task.due, task.time || undefined);
   }
 
   return (
