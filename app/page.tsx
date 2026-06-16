@@ -596,16 +596,25 @@ export default function App() {
               {COLS.map(col=>{
                 const items = todayTasks.filter(t=>t.col===col.id).sort((a,b)=>(b.starred?1:0)-(a.starred?1:0));
                 return (
-                  <div key={col.id} className="column" data-col={col.id}>
+                  <div key={col.id} className="column" data-col={col.id}
+                    onDragOver={e=>e.preventDefault()}
+                    onDrop={e=>handleColumnDrop(e, col.id)}
+                  >
                     <div className="column-head">
                       <span>{col.label}</span>
                       <span className="badge">{items.length}</span>
                     </div>
                     <div className="column-list">
                       {items.length===0
-                        ? <div className="empty-col">Žádné na dnes</div>
+                        ? <div className="empty-col"
+                            onDragOver={e=>e.preventDefault()}
+                            onDrop={e=>{e.preventDefault();if(dragState.current){moveTaskDir(dragState.current.id,col.id);dragState.current=null;dragId.current=null;}}}>
+                            Přetáhni sem
+                          </div>
                         : items.map(t=>(
                           <TaskCard key={t.id} task={t}
+                            dropBefore={dropTarget?.id===t.id&&dropTarget.before}
+                            dropAfter={dropTarget?.id===t.id&&!dropTarget.before}
                             onStar={()=>setTasks(prev=>prev.map(x=>x.id===t.id?{...x,starred:!x.starred}:x))}
                             onDelete={()=>deleteTask(t.id)}
                             onEdit={()=>openDetail(t.id)}
