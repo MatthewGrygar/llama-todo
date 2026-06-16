@@ -1,56 +1,38 @@
 "use client";
-
 import { useState, useEffect, useRef, useCallback } from "react";
 
-/* ─────────────────────────── types ─────────────────────────── */
-type Col = "todo" | "doing" | "done";
-type Color = "lilac" | "pink" | "mint" | "peach" | "sky" | "lemon" | "rose" | "coral" | "teal" | "indigo" | "sage" | "mauve";
-type CalMode = "day" | "week" | "month";
-type ViewType = "tasks" | "today" | "calendar";
+/* ═══════════ TYPES ═══════════ */
+type Col      = "todo" | "doing" | "done";
+type Color    = "lilac"|"pink"|"mint"|"peach"|"sky"|"lemon"|"rose"|"coral"|"teal"|"indigo"|"sage"|"mauve";
+type CalMode  = "day"|"week"|"month";
+type ViewType = "tasks"|"today"|"calendar";
 
 interface Task {
-  id: string;
-  title: string;
-  note: string;
-  due: string;
-  time: string;        // HH:MM or ""
-  col: Col;
-  color: Color;
-  starred: boolean;
-  created: number;
+  id: string; title: string; note: string;
+  due: string; time: string;
+  col: Col; color: Color; starred: boolean; created: number;
 }
-
 interface CalEvent {
-  id: string;
-  title: string;
-  date: string;
-  start: number;
-  end: number;
-  color: Color;
+  id: string; title: string; date: string;
+  start: number; end: number; color: Color;
 }
+interface ReminderAlert { id: string; title: string; type: "task"|"event"; minutesLeft: number; }
 
-interface ReminderAlert {
-  id: string;
-  title: string;
-  type: "task" | "event";
-  minutesLeft: number;
-}
-
-/* ─────────────────────────── constants ─────────────────────── */
+/* ═══════════ CONSTANTS ═══════════ */
 const COLS: { id: Col; label: string; short: string; dot: string }[] = [
   { id: "todo",  label: "To Do 📋",       short: "To Do",       dot: "#C4A6F2" },
-  { id: "doing", label: "In Progress ⚡", short: "In Progress", dot: "#F6B8E0" },
-  { id: "done",  label: "Done ✅",         short: "Done",        dot: "#A6E3C7" },
+  { id: "doing", label: "Probíhá ⚡",     short: "Probíhá",     dot: "#F6B8E0" },
+  { id: "done",  label: "Hotovo ✅",       short: "Hotovo",      dot: "#9ADCBD" },
 ];
 
 const COLORS: { id: Color; bg: string; border: string; name: string }[] = [
   { id: "lilac",  bg: "#E8DCFF", border: "#C4A6F2", name: "Lila" },
-  { id: "pink",   bg: "#FFD6EC", border: "#F6B8E0", name: "Lamí růžová" },
+  { id: "pink",   bg: "#FFD6EC", border: "#F6B8E0", name: "Růžová" },
   { id: "mint",   bg: "#CDF0DD", border: "#9ADCBD", name: "Mint" },
   { id: "peach",  bg: "#FFE0C4", border: "#FFBF8A", name: "Broskvová" },
-  { id: "sky",    bg: "#C9E1FF", border: "#8FC3FF", name: "Oblačná modrá" },
+  { id: "sky",    bg: "#C9E1FF", border: "#8FC3FF", name: "Modrá" },
   { id: "lemon",  bg: "#FFEBA0", border: "#FFD84D", name: "Citronová" },
-  { id: "rose",   bg: "#FFC1CC", border: "#FF8A9B", name: "Růžová" },
+  { id: "rose",   bg: "#FFC1CC", border: "#FF8A9B", name: "Červená" },
   { id: "coral",  bg: "#FFD1B8", border: "#FFA07A", name: "Korálová" },
   { id: "teal",   bg: "#B2EBE0", border: "#4DB6AC", name: "Tyrkysová" },
   { id: "indigo", bg: "#C5CAE9", border: "#7986CB", name: "Indigová" },
@@ -60,149 +42,95 @@ const COLORS: { id: Color; bg: string; border: string; name: string }[] = [
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
-/* ─────────────────────────── helpers ───────────────────────── */
-function uid() {
-  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
-}
-function startOfDay(d: Date): Date {
-  const x = new Date(d); x.setHours(0, 0, 0, 0); return x;
-}
-function startOfWeek(d: Date): Date {
-  const x = startOfDay(d); x.setDate(x.getDate() - x.getDay()); return x;
-}
-function addDays(d: Date, n: number): Date {
-  const x = new Date(d); x.setDate(x.getDate() + n); return x;
-}
-function ymd(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+/* ═══════════ HELPERS ═══════════ */
+const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
+const pad2 = (n: number) => String(n).padStart(2,"0");
+
+function startOfDay(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function startOfWeek(d: Date) { const x = startOfDay(d); x.setDate(x.getDate() - x.getDay()); return x; }
+function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+function ymd(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
 }
 function sameDate(a: Date, b: Date) { return ymd(a) === ymd(b); }
+
 function fmtHour(h: number) {
   const ap = h < 12 ? "AM" : "PM";
-  const hh = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  const hh = h===0 ? 12 : h>12 ? h-12 : h;
   return `${hh} ${ap}`;
 }
 function fmtHourShort(h: number) {
-  const ap = h < 12 ? "a" : "p";
-  const hh = h === 0 ? 12 : h > 12 ? h - 12 : h;
-  return `${hh}${ap}`;
+  return `${h===0?12:h>12?h-12:h}${h<12?"a":"p"}`;
 }
-function pad2(n: number) { return String(n).padStart(2, "0"); }
-function parseTimeToHour(s: string): number | null {
+function parseTimeToHour(s: string) {
   if (!s) return null;
-  const [h, m] = s.split(":").map(Number);
-  return h + m / 60;
+  const [h,m] = s.split(":").map(Number);
+  return h + m/60;
 }
-function hourToTimeStr(h: number) {
-  const hh = Math.floor(h);
-  const mm = Math.round((h - hh) * 60);
-  return `${pad2(hh)}:${pad2(mm)}`;
-}
+function hourToStr(h: number) { return `${pad2(Math.floor(h))}:${pad2(Math.round((h%1)*60))}`; }
+
 function friendlyDate(iso: string, time?: string) {
   if (!iso) return "";
-  const d = new Date(iso + "T00:00:00");
-  const today = startOfDay(new Date());
-  const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
-  let label = "";
-  if (diff === 0) label = "Dnes";
-  else if (diff === 1) label = "Zítra";
-  else if (diff === -1) label = "Včera";
-  else if (diff > 0 && diff < 7) label = d.toLocaleDateString("cs-CZ", { weekday: "long" });
-  else label = d.toLocaleDateString("cs-CZ", { month: "short", day: "numeric" });
-  return time ? `${label} ${time}` : label;
+  const d = new Date(iso+"T00:00:00");
+  const diff = Math.round((d.getTime() - startOfDay(new Date()).getTime()) / 86400000);
+  let s = "";
+  if (diff===0) s = "Dnes";
+  else if (diff===1) s = "Zítra";
+  else if (diff===-1) s = "Včera";
+  else if (diff>0 && diff<7) s = d.toLocaleDateString("cs-CZ",{weekday:"long"});
+  else s = d.toLocaleDateString("cs-CZ",{day:"numeric",month:"short"});
+  return time ? `${s} ${time}` : s;
 }
 
-function loadStorage<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const v = JSON.parse(localStorage.getItem(key) || "null");
-    return v ?? fallback;
-  } catch { return fallback; }
+function colorOf(id: Color) { return COLORS.find(c=>c.id===id)||COLORS[0]; }
+
+function load<T>(key: string, fb: T): T {
+  if (typeof window==="undefined") return fb;
+  try { return JSON.parse(localStorage.getItem(key)||"null") ?? fb; }
+  catch { return fb; }
 }
-function saveStorage<T>(key: string, v: T) {
-  if (typeof window !== "undefined") localStorage.setItem(key, JSON.stringify(v));
+function save<T>(key: string, v: T) {
+  if (typeof window!=="undefined") localStorage.setItem(key,JSON.stringify(v));
 }
 
-function colorOf(id: Color) {
-  return COLORS.find(c => c.id === id) || COLORS[0];
-}
-
+/* ═══════════ SEED DATA ═══════════ */
 function seedTasks(): Task[] {
-  const today = new Date();
-  const inDays = (d: number) => {
-    const x = new Date(today); x.setDate(x.getDate() + d);
-    return x.toISOString().slice(0, 10);
-  };
+  const d = (n: number) => { const x=new Date(); x.setDate(x.getDate()+n); return x.toISOString().slice(0,10); };
   return [
-    { id: uid(), title: "Učesat lamu 🦙", note: "Tentokrát použít jemný kartáč — minule jí to docela cuchalo.", due: inDays(0), time: "10:00", col: "todo",  color: "lilac", starred: true,  created: Date.now() - 3e5 },
-    { id: uid(), title: "Najít nové ovesné seno", note: "", due: inDays(2), time: "", col: "todo",  color: "peach", starred: false, created: Date.now() - 2e5 },
-    { id: uid(), title: "Sticker pack design", note: "4 samolepky pro launch:\n• lama s kafe\n• lama na józe\n• lama ve sněhu\n• lama čte knihu", due: inDays(1), time: "14:00", col: "doing", color: "pink",  starred: false, created: Date.now() - 1e5 },
-    { id: uid(), title: "Odepsat Lile", note: "Ohledně výletu na louku příští sobotu", due: "", time: "", col: "doing", color: "sky",   starred: false, created: Date.now() - 9e4 },
-    { id: uid(), title: "Zastříhnout kopýtka", note: "", due: inDays(-1), time: "", col: "done",  color: "mint",  starred: false, created: Date.now() - 2e6 },
+    { id:uid(), title:"Učesat lamu 🦙",         note:"Jemný kartáč — minule jí to cuchalo.",           due:d(0), time:"10:00", col:"todo",  color:"lilac", starred:true,  created:Date.now()-3e5 },
+    { id:uid(), title:"Nové ovesné seno",          note:"",                                                due:d(2), time:"",     col:"todo",  color:"peach", starred:false, created:Date.now()-2e5 },
+    { id:uid(), title:"Sticker pack design",       note:"4 samolepky: kafe, jóga, sníh, kniha",          due:d(1), time:"14:00", col:"doing", color:"pink",  starred:false, created:Date.now()-1e5 },
+    { id:uid(), title:"Odepsat Lile",              note:"Ohledně výletu na louku příští sobotu",          due:"",   time:"",     col:"doing", color:"sky",   starred:false, created:Date.now()-9e4 },
+    { id:uid(), title:"Zastříhnout kopýtka",       note:"",                                                due:d(-1),time:"",    col:"done",  color:"mint",  starred:false, created:Date.now()-2e6 },
   ];
 }
-
 function seedEvents(): CalEvent[] {
-  const shift = (n: number) => ymd(addDays(startOfDay(new Date()), n));
+  const s = (n:number) => ymd(addDays(startOfDay(new Date()),n));
   return [
-    { id: uid(), title: "Morning oat-cino ☕", date: shift(0), start: 8,  end: 9,  color: "peach" },
-    { id: uid(), title: "Design review",       date: shift(0), start: 11, end: 12, color: "lilac" },
-    { id: uid(), title: "Llama yoga 🧘",       date: shift(1), start: 7,  end: 8,  color: "mint"  },
-    { id: uid(), title: "Pasture walk",        date: shift(2), start: 15, end: 17, color: "pink"  },
+    { id:uid(), title:"Morning oat-cino ☕", date:s(0), start:8,  end:9,  color:"peach" },
+    { id:uid(), title:"Design review",       date:s(0), start:11, end:12, color:"lilac" },
+    { id:uid(), title:"Llama yoga 🧘",       date:s(1), start:7,  end:8,  color:"mint"  },
+    { id:uid(), title:"Pasture walk",        date:s(2), start:15, end:17, color:"pink"  },
   ];
 }
 
-/* ─────────────────────────── sub-components ─────────────────── */
-
-function IosStatus() {
-  const [time, setTime] = useState("9:41");
-  useEffect(() => {
-    const update = () => {
-      const now = new Date();
-      setTime(`${now.getHours()}:${pad2(now.getMinutes())}`);
-    };
-    update();
-    const t = setInterval(update, 30000);
-    return () => clearInterval(t);
-  }, []);
-  return (
-    <div className="ios-status" aria-hidden="true">
-      <span className="ios-time">{time}</span>
-      <span className="ios-right">
-        <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="0.6"/><rect x="4.5" y="5" width="3" height="6" rx="0.6"/><rect x="9" y="3" width="3" height="8" rx="0.6"/><rect x="13.5" y="0" width="3" height="11" rx="0.6"/></svg>
-        <svg width="15" height="11" viewBox="0 0 15 11" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><path d="M1 4.5a10 10 0 0 1 13 0"/><path d="M3.5 7a6 6 0 0 1 8 0"/><circle cx="7.5" cy="9.5" r="1" fill="currentColor" stroke="none"/></svg>
-        <svg width="26" height="12" viewBox="0 0 26 12" fill="none">
-          <rect x="0.5" y="0.5" width="22" height="11" rx="2.5" stroke="currentColor" strokeOpacity="0.45"/>
-          <rect x="24" y="4" width="1.6" height="4" rx="0.6" fill="currentColor" fillOpacity="0.45"/>
-          <rect x="2" y="2" width="16" height="8" rx="1.4" fill="currentColor"/>
-        </svg>
-      </span>
-    </div>
-  );
-}
-
+/* ═══════════ SUB-COMPONENTS ═══════════ */
 function StarSvg({ filled }: { filled: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" fill={filled?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
       <path d="M12 2.5l2.95 6 6.55.95-4.75 4.65 1.1 6.5L12 17.6l-5.85 3 1.1-6.5L2.5 9.45 9.05 8.5z"/>
     </svg>
   );
 }
 
-function ColorSwatches({ selected, onChange }: { selected: Color; onChange: (c: Color) => void }) {
+function ColorPicker({ selected, onChange }: { selected: Color; onChange: (c:Color)=>void }) {
   return (
     <div className="color-swatches">
       {COLORS.map(c => (
-        <button
-          key={c.id}
-          type="button"
-          style={{ background: c.bg, outline: selected === c.id ? `2px solid ${c.border}` : "none", outlineOffset: "2px" }}
-          aria-label={c.name}
-          title={c.name}
-          className={selected === c.id ? "active" : ""}
+        <button key={c.id} type="button"
+          className={`swatch${selected===c.id?" active":""}`}
+          style={{ background: c.bg, outlineColor: c.border }}
+          aria-label={c.name} title={c.name}
           onClick={() => onChange(c.id)}
         />
       ))}
@@ -210,863 +138,710 @@ function ColorSwatches({ selected, onChange }: { selected: Color; onChange: (c: 
   );
 }
 
-/* ─────────────────────────── main app ───────────────────────── */
+function IosStatus() {
+  const [t, setT] = useState("9:41");
+  useEffect(() => {
+    const upd = () => { const n=new Date(); setT(`${n.getHours()}:${pad2(n.getMinutes())}`); };
+    upd(); const id=setInterval(upd,30000); return ()=>clearInterval(id);
+  }, []);
+  return (
+    <div className="ios-status">
+      <span style={{fontWeight:700}}>{t}</span>
+      <span className="ios-right">
+        <svg width="16" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx=".6"/><rect x="4.5" y="5" width="3" height="6" rx=".6"/><rect x="9" y="3" width="3" height="8" rx=".6"/><rect x="13.5" y="0" width="3" height="11" rx=".6"/></svg>
+        <svg width="15" height="11" viewBox="0 0 15 11" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><path d="M1 4.5a10 10 0 0 1 13 0"/><path d="M3.5 7a6 6 0 0 1 8 0"/><circle cx="7.5" cy="9.5" r="1" fill="currentColor" stroke="none"/></svg>
+        <svg width="25" height="12" viewBox="0 0 26 12" fill="none"><rect x=".5" y=".5" width="22" height="11" rx="2.5" stroke="currentColor" strokeOpacity=".4"/><rect x="24" y="4" width="1.5" height="4" rx=".5" fill="currentColor" fillOpacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.4" fill="currentColor"/></svg>
+      </span>
+    </div>
+  );
+}
+
+/* ═══════════ MAIN APP ═══════════ */
 export default function App() {
   /* ── state ── */
-  const [tasks, setTasksRaw] = useState<Task[]>([]);
-  const [events, setEventsRaw] = useState<CalEvent[]>([]);
-  const [view, setView] = useState<ViewType>("tasks");
-  const [taskFilter, setTaskFilter] = useState<"all" | Col>("all");
-  const [calMode, setCalMode] = useState<CalMode>("month");
-  const [calDate, setCalDate] = useState<Date>(() => startOfDay(new Date()));
-  const [greeting, setGreeting] = useState("Pohodově a produktivně ✨");
+  const [tasks,     setTasksRaw]  = useState<Task[]>([]);
+  const [events,    setEventsRaw] = useState<CalEvent[]>([]);
+  const [view,      setView]      = useState<ViewType>("tasks");
+  const [calMode,   setCalMode]   = useState<CalMode>("month");
+  const [calDate,   setCalDate]   = useState<Date>(() => startOfDay(new Date()));
+  const [greeting,  setGreeting]  = useState("Pohodově a produktivně ✨");
 
   /* task modal */
   const [taskModal, setTaskModal] = useState(false);
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [tTitle, setTTitle] = useState("");
-  const [tNote, setTNote] = useState("");
-  const [tDue, setTDue] = useState("");
-  const [tTime, setTTime] = useState("");
-  const [tColor, setTColor] = useState<Color>("lilac");
-  const [tStarred, setTStarred] = useState(false);
-  const taskTitleRef = useRef<HTMLInputElement>(null);
+  const [editId,    setEditId]    = useState<string|null>(null);
+  const [tTitle,    setTTitle]    = useState("");
+  const [tNote,     setTNote]     = useState("");
+  const [tDue,      setTDue]      = useState("");
+  const [tTime,     setTTime]     = useState("");
+  const [tColor,    setTColor]    = useState<Color>("lilac");
+  const [tStarred,  setTStarred]  = useState(false);
+  const titleRef = useRef<HTMLInputElement>(null);
 
   /* event modal */
-  const [eventModal, setEventModal] = useState(false);
-  const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [evTitle, setEvTitle] = useState("");
-  const [evStart, setEvStart] = useState("08:00");
-  const [evEnd, setEvEnd] = useState("09:00");
-  const [evColor, setEvColor] = useState<Color>("lilac");
-  const [evModalSub, setEvModalSub] = useState("");
-  const [evIsEdit, setEvIsEdit] = useState(false);
-  const [pendingSlot, setPendingSlot] = useState<{ date: string; hour: number } | null>(null);
-  const eventTitleRef = useRef<HTMLInputElement>(null);
+  const [evModal,   setEvModal]   = useState(false);
+  const [evEditId,  setEvEditId]  = useState<string|null>(null);
+  const [evTitle,   setEvTitle]   = useState("");
+  const [evDate,    setEvDate]    = useState("");
+  const [evStart,   setEvStart]   = useState("08:00");
+  const [evEnd,     setEvEnd]     = useState("09:00");
+  const [evColor,   setEvColor]   = useState<Color>("lilac");
+  const evTitleRef = useRef<HTMLInputElement>(null);
 
   /* move sheet */
   const [moveModal, setMoveModal] = useState(false);
-  const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
+  const [moveId,    setMoveId]    = useState<string|null>(null);
 
-  /* drag state */
-  const dragId = useRef<string | null>(null);
+  /* filter */
+  const [filter, setFilter] = useState<"all"|Col>("all");
 
   /* reminder */
-  const [reminder, setReminder] = useState<ReminderAlert | null>(null);
+  const [reminder, setReminder] = useState<ReminderAlert|null>(null);
   const notifiedRef = useRef<Set<string>>(new Set());
+
+  /* drag */
+  const dragId = useRef<string|null>(null);
 
   /* ── init ── */
   useEffect(() => {
-    const stored = loadStorage<Task[] | null>("llama.tasks.v1", null);
-    if (!stored) {
-      const seeded = seedTasks();
-      setTasksRaw(seeded);
-      saveStorage("llama.tasks.v1", seeded);
-    } else {
-      const migrated = stored.map(t => ({
-        ...t,
-        color: t.color || "lilac" as Color,
-        starred: t.starred ?? false,
-        time: t.time ?? "",
-      }));
-      setTasksRaw(migrated);
-    }
+    const stored = load<Task[]|null>("llama.tasks.v2", null);
+    if (!stored) { const s=seedTasks(); setTasksRaw(s); save("llama.tasks.v2",s); }
+    else setTasksRaw(stored.map(t => ({ ...t, time: t.time??"", color: t.color||"lilac" as Color })));
 
-    const storedEv = loadStorage<CalEvent[] | null>("llama.events.v1", null);
-    if (!storedEv) {
-      const seeded = seedEvents();
-      setEventsRaw(seeded);
-      saveStorage("llama.events.v1", seeded);
-    } else {
-      setEventsRaw(storedEv);
-    }
+    const storedEv = load<CalEvent[]|null>("llama.events.v2", null);
+    if (!storedEv) { const s=seedEvents(); setEventsRaw(s); save("llama.events.v2",s); }
+    else setEventsRaw(storedEv);
 
     const h = new Date().getHours();
-    setGreeting(
-      h < 5  ? "Pozdní noc, lamo 🌙" :
-      h < 12 ? "Dobré ráno, lamo ☀️" :
-      h < 17 ? "Odpolední makot ✨" :
-      h < 21 ? "Pohodový večer 🌸" :
-               "Čas se zklidnit 🌙"
-    );
+    setGreeting(h<5?"Pozdní noc, lamo 🌙":h<12?"Dobré ráno, lamo ☀️":h<17?"Odpolední makot ✨":h<21?"Pohodový večer 🌸":"Čas se zklidnit 🌙");
 
-    /* request notification permission */
-    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+    if (typeof window!=="undefined" && "Notification" in window && Notification.permission==="default")
       Notification.requestPermission();
-    }
   }, []);
 
-  /* ── reminder check ── */
+  /* ── reminders ── */
   useEffect(() => {
     const check = () => {
       const now = new Date();
-      const nowMin = now.getHours() * 60 + now.getMinutes();
-      const todayStr = ymd(startOfDay(now));
-      const bucket = Math.floor(nowMin / 5);
+      const nowMin = now.getHours()*60 + now.getMinutes();
+      const today = ymd(startOfDay(now));
+      const bucket = Math.floor(nowMin/5);
 
       for (const ev of events) {
-        if (ev.date === todayStr) {
-          const evMin = ev.start * 60;
-          const diff = evMin - nowMin;
+        if (ev.date===today) {
+          const diff = ev.start*60 - nowMin;
           const key = `ev-${ev.id}-${bucket}`;
-          if (diff > 0 && diff <= 30 && !notifiedRef.current.has(key)) {
+          if (diff>0 && diff<=30 && !notifiedRef.current.has(key)) {
             notifiedRef.current.add(key);
-            const alert: ReminderAlert = { id: key, title: ev.title, type: "event", minutesLeft: Math.round(diff) };
-            setReminder(alert);
-            if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-              new Notification(`⏰ Za ${Math.round(diff)} min: ${ev.title}`, { body: "Lama To-Do připomínka" });
-            }
+            setReminder({ id:key, title:ev.title, type:"event", minutesLeft:Math.round(diff) });
+            if ("Notification" in window && Notification.permission==="granted")
+              new Notification(`⏰ Za ${Math.round(diff)} min: ${ev.title}`, { body:"Lama To-Do" });
           }
         }
       }
-
       for (const t of tasks) {
-        if (t.due === todayStr && t.time && t.col !== "done") {
-          const taskHour = parseTimeToHour(t.time);
-          if (taskHour == null) continue;
-          const taskMin = taskHour * 60;
-          const diff = taskMin - nowMin;
+        if (t.due===today && t.time && t.col!=="done") {
+          const h = parseTimeToHour(t.time);
+          if (h==null) continue;
+          const diff = h*60 - nowMin;
           const key = `task-${t.id}-${bucket}`;
-          if (diff > 0 && diff <= 30 && !notifiedRef.current.has(key)) {
+          if (diff>0 && diff<=30 && !notifiedRef.current.has(key)) {
             notifiedRef.current.add(key);
-            const alert: ReminderAlert = { id: key, title: t.title, type: "task", minutesLeft: Math.round(diff) };
-            setReminder(alert);
-            if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-              new Notification(`⏰ Za ${Math.round(diff)} min: ${t.title}`, { body: "Lama To-Do připomínka" });
-            }
+            setReminder({ id:key, title:t.title, type:"task", minutesLeft:Math.round(diff) });
+            if ("Notification" in window && Notification.permission==="granted")
+              new Notification(`⏰ Za ${Math.round(diff)} min: ${t.title}`, { body:"Lama To-Do" });
           }
         }
       }
     };
-
     check();
-    const t = setInterval(check, 60000);
-    return () => clearInterval(t);
+    const id = setInterval(check, 60000);
+    return () => clearInterval(id);
   }, [events, tasks]);
 
-  /* ── persistence helpers ── */
-  const setTasks = useCallback((fn: (prev: Task[]) => Task[]) => {
-    setTasksRaw(prev => {
-      const next = fn(prev);
-      saveStorage("llama.tasks.v1", next);
-      return next;
-    });
+  /* ── persistence ── */
+  const setTasks = useCallback((fn: (prev:Task[])=>Task[]) => {
+    setTasksRaw(prev => { const next=fn(prev); save("llama.tasks.v2",next); return next; });
   }, []);
-  const setEvents = useCallback((fn: (prev: CalEvent[]) => CalEvent[]) => {
-    setEventsRaw(prev => {
-      const next = fn(prev);
-      saveStorage("llama.events.v1", next);
-      return next;
-    });
+  const setEvents = useCallback((fn: (prev:CalEvent[])=>CalEvent[]) => {
+    setEventsRaw(prev => { const next=fn(prev); save("llama.events.v2",next); return next; });
   }, []);
 
-  /* ── counts ── */
-  const counts = { all: tasks.length, todo: 0, doing: 0, done: 0 };
-  tasks.forEach(t => { counts[t.col]++; });
-
-  /* ── task modal actions ── */
+  /* ── task actions ── */
   function openCreateTask() {
-    setEditingTaskId(null);
-    setTTitle(""); setTNote(""); setTDue(""); setTTime(""); setTColor("lilac"); setTStarred(false);
-    setTaskModal(true);
-    setTimeout(() => taskTitleRef.current?.focus(), 250);
+    setEditId(null); setTTitle(""); setTNote(""); setTDue(""); setTTime("");
+    setTColor("lilac"); setTStarred(false);
+    setTaskModal(true); setTimeout(()=>titleRef.current?.focus(),250);
   }
   function openEditTask(t: Task) {
-    setEditingTaskId(t.id);
-    setTTitle(t.title); setTNote(t.note); setTDue(t.due); setTTime(t.time ?? ""); setTColor(t.color); setTStarred(t.starred);
-    setTaskModal(true);
-    setTimeout(() => taskTitleRef.current?.focus(), 250);
+    setEditId(t.id); setTTitle(t.title); setTNote(t.note);
+    setTDue(t.due); setTTime(t.time); setTColor(t.color); setTStarred(t.starred);
+    setTaskModal(true); setTimeout(()=>titleRef.current?.focus(),250);
   }
   function saveTask() {
-    const title = tTitle.trim();
-    if (!title) { taskTitleRef.current?.focus(); return; }
-    if (editingTaskId) {
-      setTasks(prev => prev.map(t => t.id === editingTaskId
-        ? { ...t, title, note: tNote.trim(), due: tDue, time: tTime, color: tColor, starred: tStarred }
-        : t
-      ));
+    const title = tTitle.trim(); if (!title) { titleRef.current?.focus(); return; }
+    if (editId) {
+      setTasks(prev => prev.map(t => t.id===editId ? {...t,title,note:tNote.trim(),due:tDue,time:tTime,color:tColor,starred:tStarred} : t));
     } else {
-      setTasks(prev => [...prev, {
-        id: uid(), title, note: tNote.trim(), due: tDue, time: tTime,
-        col: "todo", color: tColor, starred: tStarred, created: Date.now()
-      }]);
+      setTasks(prev => [...prev,{id:uid(),title,note:tNote.trim(),due:tDue,time:tTime,col:"todo",color:tColor,starred:tStarred,created:Date.now()}]);
     }
     setTaskModal(false);
   }
+  function deleteTask(id: string) { setTasks(prev=>prev.filter(t=>t.id!==id)); }
+  function moveTaskDir(id: string, col: Col) { setTasks(prev=>prev.map(t=>t.id===id?{...t,col}:t)); }
 
-  /* ── move ── */
-  function openMoveSheet(id: string) { setMovingTaskId(id); setMoveModal(true); }
-  function moveTask(id: string, col: Col) {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, col } : t));
-    setMoveModal(false);
-  }
-  function moveTaskDirect(id: string, col: Col) {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, col } : t));
-  }
-
-  /* ── event modal actions ── */
-  function openCreateEvent(day: Date, hour: number) {
-    setEditingEventId(null);
-    setEvIsEdit(false);
-    setPendingSlot({ date: ymd(day), hour });
-    setEvTitle("");
-    setEvStart(hourToTimeStr(hour));
-    setEvEnd(hourToTimeStr(Math.min(hour + 1, 23.99)));
-    setEvColor("lilac");
-    setEvModalSub(
-      `${day.toLocaleDateString("cs-CZ", { weekday: "long", month: "short", day: "numeric" })} · začátek ${fmtHour(hour)}`
-    );
-    setEventModal(true);
-    setTimeout(() => eventTitleRef.current?.focus(), 250);
+  /* ── event actions ── */
+  function openCreateEvent(date?: Date, hour?: number) {
+    const d = date || startOfDay(new Date());
+    const h = hour ?? new Date().getHours();
+    setEvEditId(null); setEvTitle("");
+    setEvDate(ymd(d)); setEvStart(hourToStr(h)); setEvEnd(hourToStr(Math.min(h+1,23)));
+    setEvColor("lilac"); setEvModal(true);
+    setTimeout(()=>evTitleRef.current?.focus(),250);
   }
   function openEditEvent(ev: CalEvent) {
-    setEditingEventId(ev.id);
-    setEvIsEdit(true);
-    setPendingSlot(null);
-    setEvTitle(ev.title);
-    setEvStart(hourToTimeStr(ev.start));
-    setEvEnd(hourToTimeStr(ev.end));
-    setEvColor(ev.color);
-    const d = new Date(ev.date + "T00:00:00");
-    setEvModalSub(d.toLocaleDateString("cs-CZ", { weekday: "long", month: "short", day: "numeric" }));
-    setEventModal(true);
+    setEvEditId(ev.id); setEvTitle(ev.title); setEvDate(ev.date);
+    setEvStart(hourToStr(ev.start)); setEvEnd(hourToStr(ev.end)); setEvColor(ev.color);
+    setEvModal(true);
   }
   function saveEvent() {
-    const title = evTitle.trim();
-    if (!title) { eventTitleRef.current?.focus(); return; }
-    const start = parseTimeToHour(evStart);
-    let end = parseTimeToHour(evEnd);
-    if (start == null) return;
-    if (end == null || end <= start!) end = Math.min(start! + 1, 24);
-    if (editingEventId) {
-      setEvents(prev => prev.map(e => e.id === editingEventId
-        ? { ...e, title, start: start!, end: end!, color: evColor }
-        : e
-      ));
-    } else if (pendingSlot) {
-      setEvents(prev => [...prev, { id: uid(), title, start: start!, end: end!, color: evColor, date: pendingSlot!.date }]);
+    const title = evTitle.trim(); if (!title) { evTitleRef.current?.focus(); return; }
+    const start = parseTimeToHour(evStart)!;
+    let end = parseTimeToHour(evEnd) ?? start+1;
+    if (end<=start) end = start+1;
+    if (evEditId) {
+      setEvents(prev=>prev.map(e=>e.id===evEditId?{...e,title,date:evDate,start,end,color:evColor}:e));
+    } else {
+      setEvents(prev=>[...prev,{id:uid(),title,date:evDate,start,end,color:evColor}]);
     }
-    setEventModal(false);
+    setEvModal(false);
   }
-  function deleteEvent() {
-    if (!editingEventId) return;
-    setEvents(prev => prev.filter(e => e.id !== editingEventId));
-    setEventModal(false);
-  }
-
-  /* ── drag / drop ── */
-  function handleDragStart(id: string) { dragId.current = id; }
-  function handleDrop(col: Col) {
-    if (dragId.current) moveTaskDirect(dragId.current, col);
-    dragId.current = null;
-  }
-
-  /* ── calendar title ── */
-  function calTitle() {
-    if (calMode === "week") {
-      const s = startOfWeek(calDate);
-      const e = addDays(s, 6);
-      return s.getMonth() === e.getMonth()
-        ? s.toLocaleDateString("cs-CZ", { month: "long", year: "numeric" })
-        : `${s.toLocaleDateString("cs-CZ", { month: "short" })} – ${e.toLocaleDateString("cs-CZ", { month: "short", year: "numeric" })}`;
-    }
-    if (calMode === "day") return calDate.toLocaleDateString("cs-CZ", { weekday: "long", day: "numeric", month: "long" });
-    return calDate.toLocaleDateString("cs-CZ", { month: "long", year: "numeric" });
-  }
-  function calSubtitle() {
-    if (calMode === "month") return "Měsíční přehled";
-    if (calMode === "week") {
-      const s = startOfWeek(calDate);
-      return `Týden od ${s.toLocaleDateString("cs-CZ", { day: "numeric", month: "short" })}`;
-    }
-    return calDate.toLocaleDateString("cs-CZ", { day: "numeric", month: "long", year: "numeric" });
-  }
+  function deleteEvent(id: string) { setEvents(prev=>prev.filter(e=>e.id!==id)); setEvModal(false); }
 
   /* ── fab action ── */
   function fabAction() {
-    if (view === "calendar") {
-      const now = new Date();
-      openCreateEvent(startOfDay(now), now.getHours());
-    } else {
-      openCreateTask();
-    }
+    if (view==="calendar") openCreateEvent();
+    else openCreateTask();
   }
 
-  /* ── today tasks ── */
-  const todayTasks = tasks.filter(t => t.due === ymd(today));
-
-  /* ── calendar nav ── */
-  function calPrev() {
-    if (calMode === "month") setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1));
-    else setCalDate(addDays(calDate, calMode === "week" ? -7 : -1));
-  }
-  function calNext() {
-    if (calMode === "month") setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() + 1, 1));
-    else setCalDate(addDays(calDate, calMode === "week" ? 7 : 1));
-  }
-
-  /* ── tasks render helpers ── */
-  function getSortedTasks(col: Col) {
-    return tasks
-      .filter(t => t.col === col)
-      .sort((a, b) => {
-        if (col === "todo" && a.starred !== b.starred) return (b.starred ? 1 : 0) - (a.starred ? 1 : 0);
-        return b.created - a.created;
-      });
-  }
-
-  /* ── calendar day/week render ── */
-  const calDays = calMode === "week"
-    ? Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(calDate), i))
-    : calMode === "day" ? [calDate] : [];
-
-  const calGridCols = calMode === "week"
-    ? "44px repeat(7, minmax(80px, 1fr))"
-    : "44px 1fr";
+  /* ── calendar ── */
   const today = startOfDay(new Date());
+  const todayStr = ymd(today);
 
-  /* ── month render ── */
-  const dowLabels = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
+  const calDays = calMode==="week"
+    ? Array.from({length:7},(_,i)=>addDays(startOfWeek(calDate),i))
+    : calMode==="day" ? [calDate] : [];
+
+  const calGridCols = calMode==="week"
+    ? "44px repeat(7, minmax(80px,1fr))"
+    : "44px 1fr";
+
+  const dowLabels = ["Ne","Po","Út","St","Čt","Pá","So"];
   const firstOfMonth = new Date(calDate.getFullYear(), calDate.getMonth(), 1);
-  const gridStart = startOfWeek(firstOfMonth);
-  const monthCells = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
+  const monthCells = Array.from({length:42},(_,i)=>addDays(startOfWeek(firstOfMonth),i));
 
-  /* ── calendar scroll to now ── */
+  function calTitle() {
+    if (calMode==="week") {
+      const s=startOfWeek(calDate), e=addDays(s,6);
+      return s.getMonth()===e.getMonth()
+        ? s.toLocaleDateString("cs-CZ",{month:"long",year:"numeric"})
+        : `${s.toLocaleDateString("cs-CZ",{month:"short"})} – ${e.toLocaleDateString("cs-CZ",{month:"short",year:"numeric"})}`;
+    }
+    if (calMode==="day") return calDate.toLocaleDateString("cs-CZ",{weekday:"long",day:"numeric",month:"long"});
+    return calDate.toLocaleDateString("cs-CZ",{month:"long",year:"numeric"});
+  }
+  function calSub() {
+    if (calMode==="month") return "Měsíční přehled";
+    if (calMode==="week") return `Týden od ${startOfWeek(calDate).toLocaleDateString("cs-CZ",{day:"numeric",month:"short"})}`;
+    return calDate.toLocaleDateString("cs-CZ",{day:"numeric",month:"long",year:"numeric"});
+  }
+  function calNav(dir: 1|-1) {
+    if (calMode==="month") setCalDate(new Date(calDate.getFullYear(),calDate.getMonth()+dir,1));
+    else setCalDate(addDays(calDate,(calMode==="week"?7:1)*dir));
+  }
+
+  /* ── calendar scroll ── */
   const calScrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (view === "calendar" && calMode !== "month" && calScrollRef.current) {
+    if (view==="calendar" && calMode!=="month" && calScrollRef.current) {
       const now = new Date();
-      const showing = calDays.some(d => sameDate(d, now));
-      const targetHour = showing ? Math.max(0, now.getHours() - 1) : 7;
-      calScrollRef.current.scrollTop = targetHour * 52;
+      const targetH = calDays.some(d=>sameDate(d,now)) ? Math.max(0,now.getHours()-1) : 7;
+      calScrollRef.current.scrollTop = targetH*52;
     }
-  }, [view, calMode, calDate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view,calMode,calDate]); // eslint-disable-line
 
-  /* ── now line position ── */
+  /* ── now line ── */
   const [nowMinute, setNowMinute] = useState(0);
-  useEffect(() => {
-    const update = () => {
-      const n = new Date();
-      setNowMinute(n.getHours() * 60 + n.getMinutes());
-    };
-    update();
-    const t = setInterval(update, 60000);
-    return () => clearInterval(t);
-  }, []);
+  useEffect(()=>{
+    const upd = ()=>{const n=new Date(); setNowMinute(n.getHours()*60+n.getMinutes());};
+    upd(); const id=setInterval(upd,60000); return ()=>clearInterval(id);
+  },[]);
 
-  /* ────────────────────────── render ────────────────────────── */
+  /* ── sorted tasks ── */
+  function sorted(col: Col) {
+    return tasks.filter(t=>t.col===col).sort((a,b)=>{
+      if (col==="todo" && a.starred!==b.starred) return (b.starred?1:0)-(a.starred?1:0);
+      return b.created-a.created;
+    });
+  }
+  const counts = { all:tasks.length, todo:0, doing:0, done:0 };
+  tasks.forEach(t=>counts[t.col]++);
+  const todayTasks = tasks.filter(t=>t.due===todayStr);
+
+  /* ────────────────── RENDER ────────────────── */
   return (
     <>
-      <div className="phone-frame">
-        <div className="app">
-          <IosStatus />
+    <div className="app">
+      <IosStatus />
 
-          <header>
-            <div className="mascot" aria-hidden="true">🦙</div>
-            <div className="brand">
-              <h1>Lama To-Do</h1>
-              <p>{greeting}</p>
-            </div>
-            <div className="header-spacer" />
-          </header>
+      {/* Desktop header */}
+      <header>
+        <div className="header-mascot">🦙</div>
+        <div className="header-brand">
+          <h1>Lama To-Do</h1>
+          <p>{greeting}</p>
+        </div>
+      </header>
 
-          <main>
-            {/* ══ TODAY VIEW ══ */}
-            <section className={`view${view === "today" ? " active" : ""}`}>
-              <div className="tasks-toolbar">
-                <h2>Dnešní úkoly</h2>
-                <span className="count">{todayTasks.length}</span>
-              </div>
-              {todayTasks.length === 0 ? (
-                <div className="today-empty">
-                  <div className="today-empty-icon">🦙</div>
-                  <p>Na dnes nic naplánováno</p>
-                  <span>Pohoda! Nebo přidej úkol s dnešním datem.</span>
+      {/* ── MAIN ── */}
+      <main>
+
+        {/* ══ TASKS ══ */}
+        <section className={`view${view==="tasks"?" active":""}`}>
+          <div className="view-toolbar">
+            <h2 className="view-title">Moje poznámky</h2>
+            <span className="view-count">{tasks.length}</span>
+          </div>
+          <div className="filter-bar">
+            {(["all","todo","doing","done"] as const).map(f=>(
+              <button key={f} className={`filter-btn${filter===f?" active":""}`} onClick={()=>setFilter(f)}>
+                {f==="all"?"Vše":f==="todo"?"To Do":f==="doing"?"Probíhá":"Hotovo"}
+                <span className="fc">{counts[f]}</span>
+              </button>
+            ))}
+          </div>
+          <div className="board" data-filter={filter}>
+            {COLS.map(col=>{
+              const items = sorted(col.id);
+              const show = filter==="all" || filter===col.id;
+              return (
+                <div key={col.id} className="column" data-col={col.id}
+                  style={{ display: show?"":"none" }}
+                  onDragOver={e=>{e.preventDefault();(e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.add("drag-over");}}
+                  onDragLeave={e=>{(e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.remove("drag-over");}}
+                  onDrop={e=>{e.preventDefault();(e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.remove("drag-over");if(dragId.current)moveTaskDir(dragId.current,col.id);dragId.current=null;}}
+                >
+                  <div className="column-head">
+                    <span>{col.label}</span>
+                    <span className="badge">{items.length}</span>
+                  </div>
+                  <div className="column-list">
+                    {items.length===0
+                      ? <div className="empty-col">{col.id==="todo"?"Žádné úkoly":col.id==="doing"?"Teď nic neběží":"Zatím nic hotového"}</div>
+                      : items.map(t=>(
+                        <TaskCard key={t.id} task={t}
+                          onStar={()=>setTasks(prev=>prev.map(x=>x.id===t.id?{...x,starred:!x.starred}:x))}
+                          onDelete={()=>deleteTask(t.id)}
+                          onEdit={()=>openEditTask(t)}
+                          onMoveSheet={()=>{setMoveId(t.id);setMoveModal(true);}}
+                          onMovePrev={()=>{const ci=COLS.findIndex(c=>c.id===t.col);if(ci>0)moveTaskDir(t.id,COLS[ci-1].id);}}
+                          onMoveNext={()=>{const ci=COLS.findIndex(c=>c.id===t.col);if(ci<COLS.length-1)moveTaskDir(t.id,COLS[ci+1].id);}}
+                          onDragStart={()=>{dragId.current=t.id;}}
+                        />
+                      ))
+                    }
+                  </div>
                 </div>
-              ) : (
-                <div className="board">
-                  {COLS.map(col => {
-                    const items = todayTasks
-                      .filter(t => t.col === col.id)
-                      .sort((a, b) => { if (col.id === "todo" && a.starred !== b.starred) return (b.starred ? 1 : 0) - (a.starred ? 1 : 0); return b.created - a.created; });
-                    return (
-                      <div key={col.id} className="column" data-col={col.id}
-                        onDragOver={e => { e.preventDefault(); (e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.add("drag-over"); }}
-                        onDragLeave={e => { (e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.remove("drag-over"); }}
-                        onDrop={e => { e.preventDefault(); (e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.remove("drag-over"); handleDrop(col.id); }}
-                      >
-                        <div className="column-head">
-                          <h3>{col.label}</h3>
-                          <span className="badge">{items.length}</span>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ══ TODAY ══ */}
+        <section className={`view${view==="today"?" active":""}`}>
+          <div className="view-toolbar">
+            <h2 className="view-title">Dnešní úkoly</h2>
+            <span className="view-count">{todayTasks.length}</span>
+          </div>
+          {todayTasks.length===0 ? (
+            <div className="today-empty">
+              <div className="today-empty-icon">🦙</div>
+              <h3>Na dnes nic</h3>
+              <p>Výborně! Nebo přidej úkol s dnešním datem.</p>
+            </div>
+          ) : (
+            <div className="board">
+              {COLS.map(col=>{
+                const items = todayTasks.filter(t=>t.col===col.id).sort((a,b)=>(b.starred?1:0)-(a.starred?1:0));
+                return (
+                  <div key={col.id} className="column" data-col={col.id}>
+                    <div className="column-head">
+                      <span>{col.label}</span>
+                      <span className="badge">{items.length}</span>
+                    </div>
+                    <div className="column-list">
+                      {items.length===0
+                        ? <div className="empty-col">Žádné</div>
+                        : items.map(t=>(
+                          <TaskCard key={t.id} task={t}
+                            onStar={()=>setTasks(prev=>prev.map(x=>x.id===t.id?{...x,starred:!x.starred}:x))}
+                            onDelete={()=>deleteTask(t.id)}
+                            onEdit={()=>openEditTask(t)}
+                            onMoveSheet={()=>{setMoveId(t.id);setMoveModal(true);}}
+                            onMovePrev={()=>{const ci=COLS.findIndex(c=>c.id===t.col);if(ci>0)moveTaskDir(t.id,COLS[ci-1].id);}}
+                            onMoveNext={()=>{const ci=COLS.findIndex(c=>c.id===t.col);if(ci<COLS.length-1)moveTaskDir(t.id,COLS[ci+1].id);}}
+                            onDragStart={()=>{dragId.current=t.id;}}
+                          />
+                        ))
+                      }
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* ══ CALENDAR ══ */}
+        <section className={`view${view==="calendar"?" active":""}`}>
+          <div className="cal-bar">
+            <div className="cal-nav">
+              <button className="nav-btn" onClick={()=>calNav(-1)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <button className="nav-btn" onClick={()=>setCalDate(startOfDay(new Date()))}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+              <button className="nav-btn" onClick={()=>calNav(1)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            </div>
+            <div className="cal-title-wrap">
+              <div className="cal-title">{calTitle()}</div>
+              <div className="cal-subtitle">{calSub()}</div>
+            </div>
+            <div className="cal-modes">
+              {(["day","week","month"] as CalMode[]).map(m=>(
+                <button key={m} className={`cal-mode-btn${calMode===m?" active":""}`} onClick={()=>setCalMode(m)}>
+                  {m==="day"?"Den":m==="week"?"Týden":"Měsíc"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="cal-scroll" ref={calScrollRef}>
+            {/* Day / Week */}
+            {calMode!=="month" && (
+              <>
+                {/* Day headers */}
+                <div className="day-header-row" style={{gridTemplateColumns:calGridCols}}>
+                  <div className="time-corner"/>
+                  {calDays.map((d,i)=>(
+                    <div key={i} className={`day-header${sameDate(d,today)?" today":""}`}
+                      onClick={()=>{setCalDate(startOfDay(d));setCalMode("day");}}>
+                      <span className="dname">{d.toLocaleDateString("cs-CZ",{weekday:"short"})}</span>
+                      <span className="dnum">{d.getDate()}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* All-day row */}
+                {calDays.some(d=>tasks.some(t=>t.due===ymd(d)&&!t.time&&t.col!=="done")) && (
+                  <div className="allday-row" style={{gridTemplateColumns:calGridCols}}>
+                    <div className="allday-lbl">Celý den</div>
+                    {calDays.map((d,di)=>{
+                      const at = tasks.filter(t=>t.due===ymd(d)&&!t.time&&t.col!=="done");
+                      return (
+                        <div key={di} className="allday-col">
+                          {at.map(t=>{const c=colorOf(t.color);return(
+                            <div key={t.id} className="allday-chip"
+                              style={{background:c.bg,borderLeft:`2.5px solid ${c.border}`}}
+                              onClick={()=>openEditTask(t)}>
+                              ✓ {t.title}
+                            </div>
+                          );})}
                         </div>
-                        <div className="column-list">
-                          {items.length === 0
-                            ? <div className="empty-col">{col.id === "todo" ? "Žádné na dnes" : col.id === "doing" ? "Nic neběží" : "Nic hotového"}</div>
-                            : items.map(t => (
-                              <TaskCard key={t.id} task={t}
-                                onStar={() => setTasks(prev => prev.map(x => x.id === t.id ? { ...x, starred: !x.starred } : x))}
-                                onDelete={() => setTasks(prev => prev.filter(x => x.id !== t.id))}
-                                onMovePrev={() => { const ci = COLS.findIndex(c => c.id === t.col); if (ci > 0) moveTaskDirect(t.id, COLS[ci-1].id); }}
-                                onMoveNext={() => { const ci = COLS.findIndex(c => c.id === t.col); if (ci < COLS.length - 1) moveTaskDirect(t.id, COLS[ci+1].id); }}
-                                onDragStart={() => handleDragStart(t.id)}
-                                onMoveSheet={() => openMoveSheet(t.id)}
-                                onEdit={() => openEditTask(t)}
-                              />
-                            ))
-                          }
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Time grid */}
+                <div className="grid-wrap" style={{gridTemplateColumns:calGridCols}}>
+                  <div className="time-col">
+                    {HOURS.map(h=><div key={h} className="hour-lbl">{h===0?"":fmtHour(h)}</div>)}
+                  </div>
+                  {calDays.map((day,di)=>{
+                    const dayEvs = events.filter(ev=>ev.date===ymd(day));
+                    const dayTasks = tasks.filter(t=>t.due===ymd(day)&&t.time&&t.col!=="done");
+                    const isToday = sameDate(day,today);
+                    return (
+                      <div key={di} className={`day-col${isToday?" today-col":""}`}>
+                        {HOURS.map(h=><div key={h} className="hour-cell" onClick={()=>openCreateEvent(day,h)}/>)}
+                        {dayEvs.map(ev=>{
+                          const c=colorOf(ev.color);
+                          return <div key={ev.id} className="cal-event"
+                            style={{background:c.bg,borderLeft:`3px solid ${c.border}`,top:ev.start*52,height:Math.max((ev.end-ev.start)*52-2,22)}}
+                            onClick={e=>{e.stopPropagation();openEditEvent(ev);}}>
+                            <span className="ev-name">{ev.title}</span>
+                            <span className="ev-time">{fmtHourShort(ev.start)}–{fmtHourShort(ev.end)}</span>
+                          </div>;
+                        })}
+                        {dayTasks.map(t=>{
+                          const h=parseTimeToHour(t.time)??9;
+                          const c=colorOf(t.color);
+                          return <div key={t.id} className="cal-event task-ev"
+                            style={{background:c.bg,borderLeft:`3px solid ${c.border}`,top:h*52,height:46}}
+                            onClick={e=>{e.stopPropagation();openEditTask(t);}}>
+                            <span className="ev-name">✓ {t.title}</span>
+                            <span className="ev-time">{t.time}</span>
+                          </div>;
+                        })}
+                        {isToday && <div className="now-line" style={{top:(nowMinute/60)*52}}/>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {/* Month */}
+            {calMode==="month" && (
+              <div className="month-wrap">
+                <div className="month-dow">{dowLabels.map(l=><div key={l}>{l}</div>)}</div>
+                <div className="month-grid">
+                  {monthCells.map((d,i)=>{
+                    const ds=ymd(d);
+                    const dayEvs   = events.filter(ev=>ev.date===ds);
+                    const dayTasks = tasks.filter(t=>t.due===ds&&t.col!=="done");
+                    const isOther  = d.getMonth()!==calDate.getMonth();
+                    const isToday2 = sameDate(d,today);
+                    const items = [
+                      ...dayTasks.map(t=>({key:`t-${t.id}`,label:t.title,c:colorOf(t.color),isTask:true,obj:t})),
+                      ...dayEvs.map(ev=>({key:`e-${ev.id}`,label:ev.title,c:colorOf(ev.color),isTask:false,obj:ev})),
+                    ];
+                    return (
+                      <div key={i} className={`month-cell${isOther?" other-month":""}${isToday2?" today":""}`}
+                        onClick={()=>{setCalDate(startOfDay(d));setCalMode("day");}}>
+                        <div className="mday">{d.getDate()}</div>
+                        <div className="mevents">
+                          {items.slice(0,3).map(item=>(
+                            <div key={item.key} className="mchip"
+                              style={{background:item.c.bg,borderLeft:`2px solid ${item.c.border}`}}
+                              onClick={e=>{e.stopPropagation();item.isTask?openEditTask(item.obj as Task):openEditEvent(item.obj as CalEvent);}}>
+                              {item.isTask?"✓ ":""}{item.label}
+                            </div>
+                          ))}
+                          {items.length>3 && <div className="mmore">+{items.length-3}</div>}
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              )}
-            </section>
-
-            {/* ══ TASKS VIEW ══ */}
-            <section className={`view${view === "tasks" ? " active" : ""}`}>
-              <div className="tasks-toolbar">
-                <h2>Moje poznámky</h2>
-                <span className="count">{tasks.length}</span>
               </div>
+            )}
+          </div>
+        </section>
+      </main>
 
-              <div className="task-filter" role="tablist">
-                {(["all", "todo", "doing", "done"] as const).map(f => (
-                  <button
-                    key={f}
-                    className={`tf-btn${taskFilter === f ? " active" : ""}`}
-                    role="tab"
-                    onClick={() => setTaskFilter(f)}
-                  >
-                    {f === "all" ? "Vše" : f === "todo" ? "To Do" : f === "doing" ? "Probíhá" : "Hotovo"}
-                    <span className="tf-count">{counts[f]}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="board" data-filter={taskFilter}>
-                {COLS.map(col => {
-                  const items = getSortedTasks(col.id);
-                  return (
-                    <div
-                      key={col.id}
-                      className="column"
-                      data-col={col.id}
-                      onDragOver={e => { e.preventDefault(); (e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.add("drag-over"); }}
-                      onDragLeave={e => { (e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.remove("drag-over"); }}
-                      onDrop={e => { e.preventDefault(); (e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.remove("drag-over"); handleDrop(col.id); }}
-                    >
-                      <div className="column-head">
-                        <h3>{col.label}</h3>
-                        <span className="badge">{items.length}</span>
-                      </div>
-                      <div className="column-list">
-                        {items.length === 0 ? (
-                          <div className="empty-col">
-                            {col.id === "todo" ? "Žádné úkoly — přidej nějaký!" : col.id === "doing" ? "Teď nic neběží" : "Zatím nic hotového"}
-                          </div>
-                        ) : items.map(t => (
-                          <TaskCard
-                            key={t.id}
-                            task={t}
-                            onStar={() => setTasks(prev => prev.map(x => x.id === t.id ? { ...x, starred: !x.starred } : x))}
-                            onDelete={() => setTasks(prev => prev.filter(x => x.id !== t.id))}
-                            onMovePrev={() => { const ci = COLS.findIndex(c => c.id === t.col); if (ci > 0) moveTaskDirect(t.id, COLS[ci-1].id); }}
-                            onMoveNext={() => { const ci = COLS.findIndex(c => c.id === t.col); if (ci < COLS.length - 1) moveTaskDirect(t.id, COLS[ci+1].id); }}
-                            onDragStart={() => handleDragStart(t.id)}
-                            onMoveSheet={() => openMoveSheet(t.id)}
-                            onEdit={() => openEditTask(t)}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* ══ CALENDAR VIEW ══ */}
-            <section className={`view${view === "calendar" ? " active" : ""}`}>
-              <div className="cal-bar">
-                <div className="cal-nav">
-                  <button className="nav-btn" onClick={calPrev} aria-label="Předchozí">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-                  </button>
-                  <button className="nav-btn" onClick={() => setCalDate(startOfDay(new Date()))} aria-label="Dnes">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/></svg>
-                  </button>
-                  <button className="nav-btn" onClick={calNext} aria-label="Další">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-                  </button>
-                </div>
-                <div className="cal-title-group">
-                  <h2 className="cal-bar-title">{calTitle()}</h2>
-                  <p className="cal-bar-sub">{calSubtitle()}</p>
-                </div>
-                <div className="cal-modes" role="tablist">
-                  {(["day", "week", "month"] as CalMode[]).map(m => (
-                    <button key={m} className={calMode === m ? "active" : ""} onClick={() => setCalMode(m)} role="tab">
-                      {m === "day" ? "Den" : m === "week" ? "Týden" : "Měsíc"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="cal-scroll" ref={calScrollRef}>
-                {/* Day / Week */}
-                {calMode !== "month" && (
-                  <>
-                    {/* Day headers */}
-                    <div className="day-header-row" style={{ gridTemplateColumns: calGridCols }}>
-                      <div className="time-corner" />
-                      {calDays.map((d, i) => (
-                        <div key={i} className={`day-header${sameDate(d, today) ? " today" : ""}`} onClick={() => { setCalDate(startOfDay(d)); setCalMode("day"); }}>
-                          <span className="dwday">{d.toLocaleDateString("cs-CZ", { weekday: "short" })}</span>
-                          <span className={`dnum${sameDate(d, today) ? " today" : ""}`}>{d.getDate()}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* All-day tasks row */}
-                    {calDays.some(d => tasks.some(t => t.due === ymd(d) && !t.time && t.col !== "done")) && (
-                      <div className="allday-row" style={{ gridTemplateColumns: calGridCols }}>
-                        <div className="allday-label">Celý den</div>
-                        {calDays.map((d, di) => {
-                          const allDayTasks = tasks.filter(t => t.due === ymd(d) && !t.time && t.col !== "done");
-                          return (
-                            <div key={di} className="allday-col">
-                              {allDayTasks.map(t => {
-                                const c = colorOf(t.color);
-                                return (
-                                  <div key={t.id} className="allday-task" style={{ background: c.bg, borderLeft: `3px solid ${c.border}` }} onClick={() => openEditTask(t)}>
-                                    ✓ {t.title}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Time grid */}
-                    <div className="grid-wrap" style={{ gridTemplateColumns: calGridCols }}>
-                      {/* time col */}
-                      <div className="time-col">
-                        {HOURS.map(h => (
-                          <div key={h} className="hour-label">{h === 0 ? "" : fmtHour(h)}</div>
-                        ))}
-                      </div>
-                      {/* day cols */}
-                      {calDays.map((day, di) => {
-                        const dayEvents = events.filter(ev => ev.date === ymd(day));
-                        const dayTasks = tasks.filter(t => t.due === ymd(day) && t.time && t.col !== "done");
-                        const isToday = sameDate(day, today);
-                        const nowTop = (nowMinute / 60) * 52;
-                        return (
-                          <div key={di} className={`day-col${isToday ? " today-col" : ""}`}>
-                            {HOURS.map(h => (
-                              <div key={h} className="hour-cell" onClick={() => openCreateEvent(day, h)} />
-                            ))}
-
-                            {/* calendar events */}
-                            {dayEvents.map(ev => {
-                              const c = colorOf(ev.color);
-                              return (
-                                <div
-                                  key={ev.id}
-                                  className="event"
-                                  style={{ background: c.bg, borderLeft: `3px solid ${c.border}`, top: ev.start * 52, height: Math.max((ev.end - ev.start) * 52 - 2, 24) }}
-                                  onClick={e => { e.stopPropagation(); openEditEvent(ev); }}
-                                >
-                                  <span className="ev-title">{ev.title}</span>
-                                  <span className="ev-time">{fmtHourShort(ev.start)}–{fmtHourShort(ev.end)}</span>
-                                </div>
-                              );
-                            })}
-
-                            {/* tasks with time */}
-                            {dayTasks.map(t => {
-                              const hour = parseTimeToHour(t.time) ?? 9;
-                              const c = colorOf(t.color);
-                              return (
-                                <div
-                                  key={t.id}
-                                  className="event task-block"
-                                  style={{ background: c.bg, borderLeft: `3px solid ${c.border}`, top: hour * 52, height: 48 }}
-                                  onClick={e => { e.stopPropagation(); openEditTask(t); }}
-                                >
-                                  <span className="ev-title">✓ {t.title}</span>
-                                  <span className="ev-time">{t.time}</span>
-                                </div>
-                              );
-                            })}
-
-                            {isToday && <div className="now-line" style={{ top: nowTop }} />}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-
-                {/* Month */}
-                {calMode === "month" && (
-                  <div className="month-wrap">
-                    <div className="month-dow">
-                      {dowLabels.map(l => <div key={l}>{l}</div>)}
-                    </div>
-                    <div className="month-grid">
-                      {monthCells.map((d, i) => {
-                        const dateStr = ymd(d);
-                        const dayEvents = events.filter(ev => ev.date === dateStr);
-                        const dayTasks = tasks.filter(t => t.due === dateStr && t.col !== "done");
-                        const isOther = d.getMonth() !== calDate.getMonth();
-                        const isToday2 = sameDate(d, today);
-                        const allItems = [
-                          ...dayTasks.map(t => ({ key: `t-${t.id}`, label: t.title, color: colorOf(t.color), isTask: true, obj: t })),
-                          ...dayEvents.map(ev => ({ key: `e-${ev.id}`, label: ev.title, color: colorOf(ev.color), isTask: false, obj: ev })),
-                        ];
-                        const visible = allItems.slice(0, 3);
-                        const overflow = allItems.length - visible.length;
-                        return (
-                          <div
-                            key={i}
-                            className={`month-cell${isOther ? " other-month" : ""}${isToday2 ? " today" : ""}`}
-                            onClick={() => { setCalDate(startOfDay(d)); setCalMode("day"); }}
-                          >
-                            <div className="mday">{d.getDate()}</div>
-                            <div className="mevents">
-                              {visible.map(item => (
-                                <div
-                                  key={item.key}
-                                  className="mchip"
-                                  style={{ background: item.color.bg, borderLeft: `2px solid ${item.color.border}` }}
-                                  onClick={e => { e.stopPropagation(); item.isTask ? openEditTask(item.obj as Task) : openEditEvent(item.obj as CalEvent); }}
-                                >
-                                  {item.isTask ? "✓ " : ""}{item.label}
-                                </div>
-                              ))}
-                              {overflow > 0 && <div className="mmore">+{overflow}</div>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </section>
-          </main>
-
-          {/* ══ TAB BAR / DESKTOP SIDEBAR ══ */}
-          <nav className="tabbar">
-            {/* Desktop: branding */}
-            <div className="sidebar-top">
-              <div className="sidebar-mascot" aria-hidden="true">🦙</div>
-              <div className="sidebar-brand-text">
-                <span className="sidebar-title">Lama To-Do</span>
-                <span className="sidebar-greeting">{greeting}</span>
-              </div>
-            </div>
-
-            {/* 3 Nav tabs */}
-            <button className={`tab${view === "tasks" ? " active" : ""}`} onClick={() => setView("tasks")}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9h8M8 13h5M8 17h7"/></svg>
-              Poznámky
-            </button>
-            <button className={`tab${view === "today" ? " active" : ""}`} onClick={() => setView("today")}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-              Dnes
-            </button>
-            <button className={`tab${view === "calendar" ? " active" : ""}`} onClick={() => setView("calendar")}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
-              Kalendář
-            </button>
-
-            {/* Desktop: add button below nav */}
-            <button className="sidebar-add-btn" onClick={fabAction}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-              {view === "calendar" ? "Nová událost" : "Nový úkol"}
-            </button>
-
-            {/* Desktop: bottom hint */}
-            <div className="sidebar-hint">
-              <span className="sidebar-hint-icon">🦙</span>
-              <span>Úkoly s termínem se automaticky objeví v kalendáři.</span>
-            </div>
-          </nav>
-
-          {/* Mobile floating FAB */}
-          <button className="mobile-fab" onClick={fabAction} aria-label="Přidat">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          </button>
+      {/* ══ SIDEBAR / TABBAR ══ */}
+      <nav className="tabbar">
+        {/* Desktop branding */}
+        <div className="sidebar-top">
+          <div className="sidebar-mascot">🦙</div>
+          <div>
+            <div className="sidebar-name">Lama To-Do</div>
+            <div className="sidebar-greet">{greeting}</div>
+          </div>
         </div>
+
+        {/* Nav tabs */}
+        <button className={`tab${view==="tasks"?" active":""}`} onClick={()=>setView("tasks")}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9h8M8 13h5M8 17h7"/></svg>
+          Poznámky
+        </button>
+        <button className={`tab${view==="today"?" active":""}`} onClick={()=>setView("today")}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          Dnes
+        </button>
+        <button className={`tab${view==="calendar"?" active":""}`} onClick={()=>setView("calendar")}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
+          Kalendář
+        </button>
+
+        {/* Desktop add button */}
+        <button className="sidebar-add" onClick={fabAction}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          {view==="calendar"?"Nová událost":"Nový úkol"}
+        </button>
+
+        {/* Desktop hint */}
+        <div className="sidebar-hint">
+          <span className="sidebar-hint-icon">🦙</span>
+          <span>Úkoly s termínem se automaticky zobrazí v kalendáři.</span>
+        </div>
+      </nav>
+
+      {/* Mobile FAB */}
+      <button className="mobile-fab" onClick={fabAction} aria-label="Přidat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+
+    {/* ══ REMINDER ══ */}
+    {reminder && (
+      <div className="reminder">
+        <div className="reminder-icon">⏰</div>
+        <div className="reminder-body">
+          <div className="reminder-title">{reminder.title}</div>
+          <div className="reminder-sub">{reminder.type==="task"?"Úkol":"Událost"} · za {reminder.minutesLeft} min</div>
+        </div>
+        <button className="reminder-close" onClick={()=>setReminder(null)}>✕</button>
       </div>
+    )}
 
-      {/* ══ REMINDER POPUP ══ */}
-      {reminder && (
-        <div className="reminder-popup" role="alert">
-          <div className="reminder-icon">⏰</div>
-          <div className="reminder-body">
-            <div className="reminder-title">{reminder.title}</div>
-            <div className="reminder-sub">
-              {reminder.type === "task" ? "Úkol" : "Událost"} · za {reminder.minutesLeft} min
-            </div>
-          </div>
-          <button className="reminder-close" onClick={() => setReminder(null)} aria-label="Zavřít">✕</button>
+    {/* ══ TASK MODAL ══ */}
+    <div className={`scrim${taskModal?" open":""}`} onClick={e=>{if(e.target===e.currentTarget)setTaskModal(false);}}>
+      <div className="sheet">
+        <div className="sheet-handle"/>
+        <h3>{editId?"✏️ Upravit úkol":"🦙 Nový úkol"}</h3>
+        <p className="sub">Co by si lama ráda odbavila?</p>
+        <div className="field">
+          <label>Název</label>
+          <input ref={titleRef} type="text" placeholder="např. Zalít kaktusy" maxLength={80}
+            value={tTitle} onChange={e=>setTTitle(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveTask()}/>
         </div>
-      )}
-
-      {/* ══ TASK MODAL ══ */}
-      <div className={`scrim${taskModal ? " open" : ""}`} onClick={e => { if (e.target === e.currentTarget) setTaskModal(false); }}>
-        <div className="sheet" role="dialog" aria-modal="true">
-          <div className="sheet-handle" />
-          <h3>{editingTaskId ? "✏️ Upravit poznámku" : "🦙 Nová poznámka"}</h3>
-          <p className="sub">Co by si lama ráda odbavila?</p>
-          <div className="field">
-            <label htmlFor="task-title">Název</label>
-            <input ref={taskTitleRef} id="task-title" type="text" placeholder="např. Zalít kaktusy" maxLength={80} autoComplete="off" value={tTitle} onChange={e => setTTitle(e.target.value)} onKeyDown={e => e.key === "Enter" && saveTask()} />
-          </div>
-          <div className="field">
-            <label htmlFor="task-note">Poznámka (volitelné)</label>
-            <textarea id="task-note" placeholder="Detaily, kontext, případně odkazy…" maxLength={500} value={tNote} onChange={e => setTNote(e.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="task-due">Datum</label>
-            <input id="task-due" type="date" value={tDue} onChange={e => { setTDue(e.target.value); if (!e.target.value) setTTime(""); }} />
-          </div>
-          {tDue && (
-            <div className="field">
-              <label>Čas</label>
-              <div className="time-mode-toggle">
-                <button type="button" className={`time-mode-btn${!tTime ? " active" : ""}`} onClick={() => setTTime("")}>Celý den</button>
-                <button type="button" className={`time-mode-btn${tTime ? " active" : ""}`} onClick={() => setTTime(tTime || "09:00")}>Konkrétní čas</button>
-              </div>
-              {tTime && (
-                <input id="task-time" type="time" value={tTime} onChange={e => setTTime(e.target.value)} style={{ marginTop: 8 }} />
-              )}
-            </div>
-          )}
-          <div className="field">
-            <label>Barva</label>
-            <ColorSwatches selected={tColor} onChange={setTColor} />
-          </div>
-          <div className="field">
-            <button type="button" className={`star-toggle${tStarred ? " on" : ""}`} aria-pressed={tStarred} onClick={() => setTStarred(v => !v)}>
-              <span className="star-icon"><StarSvg filled={tStarred} /></span>
-              <span className="label-stack">
-                Důležité
-                <small>Připnout nahoře v To Do</small>
-              </span>
-            </button>
-          </div>
-          <div className="sheet-actions">
-            <button className="btn-secondary" onClick={() => setTaskModal(false)}>Zrušit</button>
-            <button className="btn-primary" onClick={saveTask}>Uložit</button>
-          </div>
+        <div className="field">
+          <label>Poznámka <span className="field-hint">(volitelné)</span></label>
+          <textarea placeholder="Detaily, kontext…" maxLength={500} value={tNote} onChange={e=>setTNote(e.target.value)}/>
         </div>
-      </div>
-
-      {/* ══ EVENT MODAL ══ */}
-      <div className={`scrim${eventModal ? " open" : ""}`} onClick={e => { if (e.target === e.currentTarget) setEventModal(false); }}>
-        <div className="sheet" role="dialog" aria-modal="true">
-          <div className="sheet-handle" />
-          <h3>🦙 {evIsEdit ? "Upravit událost" : "Nová událost"}</h3>
-          <p className="sub">{evModalSub}</p>
-          <div className="field">
-            <label htmlFor="ev-title">Název</label>
-            <input ref={eventTitleRef} id="ev-title" type="text" placeholder="např. Lamí jóga 🧘" maxLength={60} autoComplete="off" value={evTitle} onChange={e => setEvTitle(e.target.value)} onKeyDown={e => e.key === "Enter" && saveEvent()} />
-          </div>
+        <div className="field">
+          <label>Datum <span className="field-hint">(volitelné)</span></label>
+          <input type="date" value={tDue} onChange={e=>{setTDue(e.target.value);if(!e.target.value)setTTime("");}}/>
+        </div>
+        {tDue && (
           <div className="field">
             <label>Čas</label>
-            <div className="time-row">
-              <input type="time" value={evStart} onChange={e => setEvStart(e.target.value)} />
-              <input type="time" value={evEnd} onChange={e => setEvEnd(e.target.value)} />
+            <div className="time-toggle">
+              <button type="button" className={`time-toggle-btn${!tTime?" active":""}`} onClick={()=>setTTime("")}>Celý den</button>
+              <button type="button" className={`time-toggle-btn${tTime?" active":""}`} onClick={()=>setTTime(tTime||"09:00")}>Konkrétní čas</button>
             </div>
+            {tTime && <input type="time" value={tTime} onChange={e=>setTTime(e.target.value)}/>}
           </div>
-          <div className="field">
-            <label>Barva</label>
-            <ColorSwatches selected={evColor} onChange={setEvColor} />
-          </div>
-          <div className="sheet-actions">
-            {evIsEdit && <button className="btn-secondary" onClick={deleteEvent}>Smazat</button>}
-            <button className="btn-secondary" onClick={() => setEventModal(false)}>Zrušit</button>
-            <button className="btn-primary" onClick={saveEvent}>Uložit</button>
-          </div>
+        )}
+        <div className="field">
+          <label>Barva</label>
+          <ColorPicker selected={tColor} onChange={setTColor}/>
+        </div>
+        <div className="field">
+          <button type="button" className={`star-toggle${tStarred?" on":""}`} onClick={()=>setTStarred(v=>!v)}>
+            <span className="star-icon"><StarSvg filled={tStarred}/></span>
+            <span className="label-stack">
+              <span>Důležité</span>
+              <small>Připnout nahoře v To Do</small>
+            </span>
+          </button>
+        </div>
+        <div className="sheet-actions">
+          {editId && <button className="btn-secondary danger" onClick={()=>{deleteTask(editId);setTaskModal(false);}}>Smazat</button>}
+          <button className="btn-secondary" onClick={()=>setTaskModal(false)}>Zrušit</button>
+          <button className="btn-primary" onClick={saveTask}>Uložit</button>
         </div>
       </div>
+    </div>
 
-      {/* ══ MOVE SHEET ══ */}
-      <div className={`scrim${moveModal ? " open" : ""}`} onClick={e => { if (e.target === e.currentTarget) setMoveModal(false); }}>
-        <div className="sheet" role="dialog" aria-modal="true">
-          <div className="sheet-handle" />
-          <h3>Přesunout poznámku</h3>
-          <p className="sub">Kam to bude patřit?</p>
-          <div className="move-sheet-list">
-            {COLS.map(c => {
-              const task = tasks.find(t => t.id === movingTaskId);
-              return (
-                <button key={c.id} className={task?.col === c.id ? "current" : ""} onClick={() => { if (movingTaskId) moveTask(movingTaskId, c.id); }}>
-                  <span className="dot" style={{ background: c.dot }} />
-                  {c.label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="sheet-actions">
-            <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setMoveModal(false)}>Zrušit</button>
+    {/* ══ EVENT MODAL ══ */}
+    <div className={`scrim${evModal?" open":""}`} onClick={e=>{if(e.target===e.currentTarget)setEvModal(false);}}>
+      <div className="sheet">
+        <div className="sheet-handle"/>
+        <h3>{evEditId?"✏️ Upravit událost":"📅 Nová událost"}</h3>
+        <p className="sub">{evDate ? new Date(evDate+"T00:00:00").toLocaleDateString("cs-CZ",{weekday:"long",day:"numeric",month:"long"}) : ""}</p>
+        <div className="field">
+          <label>Název</label>
+          <input ref={evTitleRef} type="text" placeholder="např. Lamí jóga 🧘" maxLength={60}
+            value={evTitle} onChange={e=>setEvTitle(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveEvent()}/>
+        </div>
+        <div className="field">
+          <label>Datum</label>
+          <input type="date" value={evDate} onChange={e=>setEvDate(e.target.value)}/>
+        </div>
+        <div className="field">
+          <label>Čas</label>
+          <div className="time-row">
+            <input type="time" value={evStart} onChange={e=>setEvStart(e.target.value)}/>
+            <input type="time" value={evEnd}   onChange={e=>setEvEnd(e.target.value)}/>
           </div>
         </div>
+        <div className="field">
+          <label>Barva</label>
+          <ColorPicker selected={evColor} onChange={setEvColor}/>
+        </div>
+        <div className="sheet-actions">
+          {evEditId && <button className="btn-secondary danger" onClick={()=>evEditId&&deleteEvent(evEditId)}>Smazat</button>}
+          <button className="btn-secondary" onClick={()=>setEvModal(false)}>Zrušit</button>
+          <button className="btn-primary" onClick={saveEvent}>Uložit</button>
+        </div>
       </div>
+    </div>
+
+    {/* ══ MOVE SHEET ══ */}
+    <div className={`scrim${moveModal?" open":""}`} onClick={e=>{if(e.target===e.currentTarget)setMoveModal(false);}}>
+      <div className="sheet">
+        <div className="sheet-handle"/>
+        <h3>Přesunout úkol</h3>
+        <p className="sub">Kam patří?</p>
+        <div className="move-list">
+          {COLS.map(c=>{
+            const t = tasks.find(t=>t.id===moveId);
+            return (
+              <button key={c.id} className={`move-item${t?.col===c.id?" current":""}`}
+                onClick={()=>{if(moveId){moveTaskDir(moveId,c.id);setMoveModal(false);}}}>
+                <span className="move-dot" style={{background:c.dot}}/>
+                {c.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="sheet-actions">
+          <button className="btn-secondary" style={{flex:1}} onClick={()=>setMoveModal(false)}>Zrušit</button>
+        </div>
+      </div>
+    </div>
     </>
   );
 }
 
-/* ─────────────────────────── TaskCard component ────────────────── */
-function TaskCard({
-  task, onStar, onDelete, onMovePrev, onMoveNext, onDragStart, onMoveSheet, onEdit,
-}: {
+/* ═══════════ TASK CARD ═══════════ */
+function TaskCard({ task, onStar, onDelete, onEdit, onMoveSheet, onMovePrev, onMoveNext, onDragStart }:{
   task: Task;
-  onStar: () => void;
-  onDelete: () => void;
-  onMovePrev: () => void;
-  onMoveNext: () => void;
-  onDragStart: () => void;
-  onMoveSheet: () => void;
-  onEdit: () => void;
+  onStar:()=>void; onDelete:()=>void; onEdit:()=>void;
+  onMoveSheet:()=>void; onMovePrev:()=>void; onMoveNext:()=>void; onDragStart:()=>void;
 }) {
-  const colIdx = COLS.findIndex(c => c.id === task.col);
+  const colIdx = COLS.findIndex(c=>c.id===task.col);
   const tapStart = useRef(0);
 
-  let dueClass = "";
-  let dueLabel = "";
+  let dueClass="", dueLabel="";
   if (task.due) {
-    const d = new Date(task.due + "T00:00:00");
-    const diff = Math.round((d.getTime() - startOfDay(new Date()).getTime()) / 86400000);
-    dueClass = task.col !== "done" && diff < 0 ? "overdue" : task.col !== "done" && diff === 0 ? "today" : "";
-    dueLabel = friendlyDate(task.due, task.time || undefined);
+    const d = new Date(task.due+"T00:00:00");
+    const diff = Math.round((d.getTime()-startOfDay(new Date()).getTime())/86400000);
+    dueClass = task.col!=="done"&&diff<0?"overdue":task.col!=="done"&&diff===0?"today":"";
+    dueLabel = friendlyDate(task.due, task.time||undefined);
   }
 
   return (
-    <div
-      className={`card${task.starred ? " starred" : ""}`}
-      data-color={task.color}
-      draggable
-      onDragStart={onDragStart}
-      onTouchStart={() => { tapStart.current = Date.now(); }}
-      onTouchEnd={e => { if (Date.now() - tapStart.current < 500 && !(e.target as Element).closest("button")) onMoveSheet(); }}
-      onDoubleClick={e => { if (!(e.target as Element).closest("button")) onEdit(); }}
+    <div className="card" data-color={task.color}
+      draggable onDragStart={onDragStart}
+      onTouchStart={()=>{tapStart.current=Date.now();}}
+      onTouchEnd={e=>{if(Date.now()-tapStart.current<500&&!(e.target as Element).closest("button"))onMoveSheet();}}
+      onDoubleClick={e=>{if(!(e.target as Element).closest("button"))onEdit();}}
     >
-      <div className="star-badge" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.95 6 6.55.95-4.75 4.65 1.1 6.5L12 17.6l-5.85 3 1.1-6.5L2.5 9.45 9.05 8.5z"/></svg>
-      </div>
+      <div className="star-badge"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.95 6 6.55.95-4.75 4.65 1.1 6.5L12 17.6l-5.85 3 1.1-6.5L2.5 9.45 9.05 8.5z"/></svg></div>
       <div className="card-head">
-        <div className={`card-title${task.col === "done" ? " done" : ""}`}>{task.title}</div>
+        <div className={`card-title${task.col==="done"?" done":""}`}>{task.title}</div>
         <div className="card-actions">
-          <button className={`icon-btn star${task.starred ? " on" : ""}`} aria-label="Důležité" aria-pressed={task.starred} onClick={e => { e.stopPropagation(); onStar(); }}>
-            <StarSvg filled={task.starred} />
+          <button className={`icon-btn star${task.starred?" on":""}`} onClick={e=>{e.stopPropagation();onStar();}}>
+            <StarSvg filled={task.starred}/>
           </button>
-          <button className="icon-btn delete" aria-label="Smazat" onClick={e => { e.stopPropagation(); onDelete(); }}>
+          <button className="icon-btn delete" onClick={e=>{e.stopPropagation();onDelete();}}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>
           </button>
         </div>
@@ -1074,19 +849,19 @@ function TaskCard({
       {task.note && <div className="card-note">{task.note}</div>}
       {task.due && (
         <div className="card-meta">
-          <span className={`due-chip${dueClass ? ` ${dueClass}` : ""}`}>
+          <span className={`due-chip${dueClass?` ${dueClass}`:""}`}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
             {dueLabel}
           </span>
         </div>
       )}
       <div className="move-row">
-        <button className="move-btn" disabled={colIdx === 0} onClick={e => { e.stopPropagation(); onMovePrev(); }}>
+        <button className="move-btn" disabled={colIdx===0} onClick={e=>{e.stopPropagation();onMovePrev();}}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-          {colIdx > 0 ? COLS[colIdx - 1].short : ""}
+          {colIdx>0?COLS[colIdx-1].short:""}
         </button>
-        <button className="move-btn" disabled={colIdx === COLS.length - 1} onClick={e => { e.stopPropagation(); onMoveNext(); }}>
-          {colIdx < COLS.length - 1 ? COLS[colIdx + 1].short : ""}
+        <button className="move-btn" disabled={colIdx===COLS.length-1} onClick={e=>{e.stopPropagation();onMoveNext();}}>
+          {colIdx<COLS.length-1?COLS[colIdx+1].short:""}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
         </button>
       </div>
