@@ -4,8 +4,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 /* ─────────────────────────── types ─────────────────────────── */
 type Col = "todo" | "doing" | "done";
-type Color = "lilac" | "pink" | "mint" | "peach" | "sky" | "lemon";
+type Color = "lilac" | "pink" | "mint" | "peach" | "sky" | "lemon" | "rose" | "coral" | "teal" | "indigo" | "sage" | "mauve";
 type CalMode = "day" | "week" | "month";
+type ViewType = "tasks" | "today" | "calendar";
 
 interface Task {
   id: string;
@@ -43,12 +44,18 @@ const COLS: { id: Col; label: string; short: string; dot: string }[] = [
 ];
 
 const COLORS: { id: Color; bg: string; border: string; name: string }[] = [
-  { id: "lilac", bg: "#E8DCFF", border: "#C4A6F2", name: "Lila" },
-  { id: "pink",  bg: "#FFD6EC", border: "#F6B8E0", name: "Lamí růžová" },
-  { id: "mint",  bg: "#CDF0DD", border: "#9ADCBD", name: "Kaktusová mint" },
-  { id: "peach", bg: "#FFE0C4", border: "#FFBF8A", name: "Broskvová" },
-  { id: "sky",   bg: "#C9E1FF", border: "#8FC3FF", name: "Oblačná modrá" },
-  { id: "lemon", bg: "#FFEBA0", border: "#FFD84D", name: "Citronová" },
+  { id: "lilac",  bg: "#E8DCFF", border: "#C4A6F2", name: "Lila" },
+  { id: "pink",   bg: "#FFD6EC", border: "#F6B8E0", name: "Lamí růžová" },
+  { id: "mint",   bg: "#CDF0DD", border: "#9ADCBD", name: "Mint" },
+  { id: "peach",  bg: "#FFE0C4", border: "#FFBF8A", name: "Broskvová" },
+  { id: "sky",    bg: "#C9E1FF", border: "#8FC3FF", name: "Oblačná modrá" },
+  { id: "lemon",  bg: "#FFEBA0", border: "#FFD84D", name: "Citronová" },
+  { id: "rose",   bg: "#FFC1CC", border: "#FF8A9B", name: "Růžová" },
+  { id: "coral",  bg: "#FFD1B8", border: "#FFA07A", name: "Korálová" },
+  { id: "teal",   bg: "#B2EBE0", border: "#4DB6AC", name: "Tyrkysová" },
+  { id: "indigo", bg: "#C5CAE9", border: "#7986CB", name: "Indigová" },
+  { id: "sage",   bg: "#C8E6C9", border: "#81C784", name: "Šalvějová" },
+  { id: "mauve",  bg: "#E1BEE7", border: "#BA68C8", name: "Fialová" },
 ];
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -208,7 +215,7 @@ export default function App() {
   /* ── state ── */
   const [tasks, setTasksRaw] = useState<Task[]>([]);
   const [events, setEventsRaw] = useState<CalEvent[]>([]);
-  const [view, setView] = useState<"tasks" | "calendar">("tasks");
+  const [view, setView] = useState<ViewType>("tasks");
   const [taskFilter, setTaskFilter] = useState<"all" | Col>("all");
   const [calMode, setCalMode] = useState<CalMode>("month");
   const [calDate, setCalDate] = useState<Date>(() => startOfDay(new Date()));
@@ -477,13 +484,16 @@ export default function App() {
 
   /* ── fab action ── */
   function fabAction() {
-    if (view === "tasks") {
-      openCreateTask();
-    } else {
+    if (view === "calendar") {
       const now = new Date();
       openCreateEvent(startOfDay(now), now.getHours());
+    } else {
+      openCreateTask();
     }
   }
+
+  /* ── today tasks ── */
+  const todayTasks = tasks.filter(t => t.due === ymd(today));
 
   /* ── calendar nav ── */
   function calPrev() {
@@ -561,6 +571,57 @@ export default function App() {
           </header>
 
           <main>
+            {/* ══ TODAY VIEW ══ */}
+            <section className={`view${view === "today" ? " active" : ""}`}>
+              <div className="tasks-toolbar">
+                <h2>Dnešní úkoly</h2>
+                <span className="count">{todayTasks.length}</span>
+              </div>
+              {todayTasks.length === 0 ? (
+                <div className="today-empty">
+                  <div className="today-empty-icon">🦙</div>
+                  <p>Na dnes nic naplánováno</p>
+                  <span>Pohoda! Nebo přidej úkol s dnešním datem.</span>
+                </div>
+              ) : (
+                <div className="board">
+                  {COLS.map(col => {
+                    const items = todayTasks
+                      .filter(t => t.col === col.id)
+                      .sort((a, b) => { if (col.id === "todo" && a.starred !== b.starred) return (b.starred ? 1 : 0) - (a.starred ? 1 : 0); return b.created - a.created; });
+                    return (
+                      <div key={col.id} className="column" data-col={col.id}
+                        onDragOver={e => { e.preventDefault(); (e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.add("drag-over"); }}
+                        onDragLeave={e => { (e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.remove("drag-over"); }}
+                        onDrop={e => { e.preventDefault(); (e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.remove("drag-over"); handleDrop(col.id); }}
+                      >
+                        <div className="column-head">
+                          <h3>{col.label}</h3>
+                          <span className="badge">{items.length}</span>
+                        </div>
+                        <div className="column-list">
+                          {items.length === 0
+                            ? <div className="empty-col">{col.id === "todo" ? "Žádné na dnes" : col.id === "doing" ? "Nic neběží" : "Nic hotového"}</div>
+                            : items.map(t => (
+                              <TaskCard key={t.id} task={t}
+                                onStar={() => setTasks(prev => prev.map(x => x.id === t.id ? { ...x, starred: !x.starred } : x))}
+                                onDelete={() => setTasks(prev => prev.filter(x => x.id !== t.id))}
+                                onMovePrev={() => { const ci = COLS.findIndex(c => c.id === t.col); if (ci > 0) moveTaskDirect(t.id, COLS[ci-1].id); }}
+                                onMoveNext={() => { const ci = COLS.findIndex(c => c.id === t.col); if (ci < COLS.length - 1) moveTaskDirect(t.id, COLS[ci+1].id); }}
+                                onDragStart={() => handleDragStart(t.id)}
+                                onMoveSheet={() => openMoveSheet(t.id)}
+                                onEdit={() => openEditTask(t)}
+                              />
+                            ))
+                          }
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
             {/* ══ TASKS VIEW ══ */}
             <section className={`view${view === "tasks" ? " active" : ""}`}>
               <div className="tasks-toolbar">
@@ -799,7 +860,7 @@ export default function App() {
 
           {/* ══ TAB BAR / DESKTOP SIDEBAR ══ */}
           <nav className="tabbar">
-            {/* Desktop sidebar branding */}
+            {/* Desktop: branding */}
             <div className="sidebar-top">
               <div className="sidebar-mascot" aria-hidden="true">🦙</div>
               <div className="sidebar-brand-text">
@@ -808,28 +869,37 @@ export default function App() {
               </div>
             </div>
 
-            {/* FAB — circular on mobile, full-width on desktop */}
-            <button className="tab-fab" onClick={fabAction} aria-label="Přidat">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-              <span className="fab-label">{view === "tasks" ? "Nový úkol" : "Nová událost"}</span>
-            </button>
-
-            {/* Nav */}
+            {/* 3 Nav tabs */}
             <button className={`tab${view === "tasks" ? " active" : ""}`} onClick={() => setView("tasks")}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9h8M8 13h5M8 17h7"/></svg>
               Poznámky
+            </button>
+            <button className={`tab${view === "today" ? " active" : ""}`} onClick={() => setView("today")}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+              Dnes
             </button>
             <button className={`tab${view === "calendar" ? " active" : ""}`} onClick={() => setView("calendar")}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
               Kalendář
             </button>
 
-            {/* Desktop sidebar bottom hint */}
+            {/* Desktop: add button below nav */}
+            <button className="sidebar-add-btn" onClick={fabAction}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              {view === "calendar" ? "Nová událost" : "Nový úkol"}
+            </button>
+
+            {/* Desktop: bottom hint */}
             <div className="sidebar-hint">
               <span className="sidebar-hint-icon">🦙</span>
               <span>Úkoly s termínem se automaticky objeví v kalendáři.</span>
             </div>
           </nav>
+
+          {/* Mobile floating FAB */}
+          <button className="mobile-fab" onClick={fabAction} aria-label="Přidat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
         </div>
       </div>
 
@@ -861,16 +931,22 @@ export default function App() {
             <label htmlFor="task-note">Poznámka (volitelné)</label>
             <textarea id="task-note" placeholder="Detaily, kontext, případně odkazy…" maxLength={500} value={tNote} onChange={e => setTNote(e.target.value)} />
           </div>
-          <div className="field field-row">
-            <div className="field-sub">
-              <label htmlFor="task-due">Datum</label>
-              <input id="task-due" type="date" value={tDue} onChange={e => setTDue(e.target.value)} />
-            </div>
-            <div className="field-sub">
-              <label htmlFor="task-time">Čas{!tDue && <span className="field-hint"> (vyber datum)</span>}</label>
-              <input id="task-time" type="time" value={tTime} disabled={!tDue} onChange={e => setTTime(e.target.value)} />
-            </div>
+          <div className="field">
+            <label htmlFor="task-due">Datum</label>
+            <input id="task-due" type="date" value={tDue} onChange={e => { setTDue(e.target.value); if (!e.target.value) setTTime(""); }} />
           </div>
+          {tDue && (
+            <div className="field">
+              <label>Čas</label>
+              <div className="time-mode-toggle">
+                <button type="button" className={`time-mode-btn${!tTime ? " active" : ""}`} onClick={() => setTTime("")}>Celý den</button>
+                <button type="button" className={`time-mode-btn${tTime ? " active" : ""}`} onClick={() => setTTime(tTime || "09:00")}>Konkrétní čas</button>
+              </div>
+              {tTime && (
+                <input id="task-time" type="time" value={tTime} onChange={e => setTTime(e.target.value)} style={{ marginTop: 8 }} />
+              )}
+            </div>
+          )}
           <div className="field">
             <label>Barva</label>
             <ColorSwatches selected={tColor} onChange={setTColor} />
