@@ -7,9 +7,12 @@ type Color    = "lilac"|"pink"|"mint"|"peach"|"sky"|"lemon"|"rose"|"coral"|"teal
 type CalMode  = "day"|"week"|"month";
 type ViewType = "tasks"|"today"|"calendar";
 
+interface ChecklistItem { id: string; text: string; done: boolean; }
+
 interface Task {
   id: string; title: string; note: string;
   due: string; time: string;
+  checklist?: ChecklistItem[];
   col: Col; color: Color; starred: boolean; created: number;
   order?: number;
 }
@@ -221,16 +224,23 @@ export default function App() {
   const [calDate,   setCalDate]   = useState<Date>(() => startOfDay(new Date()));
   const [greeting,  setGreeting]  = useState("Pohodově a produktivně ✨");
 
+  /* detail sheet */
+  const [detailId,   setDetailId]   = useState<string|null>(null);
+  const detailTask = tasks.find(t => t.id === detailId) ?? null;
+
   /* task modal */
-  const [taskModal, setTaskModal] = useState(false);
-  const [editId,    setEditId]    = useState<string|null>(null);
-  const [tTitle,    setTTitle]    = useState("");
-  const [tNote,     setTNote]     = useState("");
-  const [tDue,      setTDue]      = useState("");
-  const [tTime,     setTTime]     = useState("");
-  const [tColor,    setTColor]    = useState<Color>("lilac");
-  const [tStarred,  setTStarred]  = useState(false);
-  const titleRef = useRef<HTMLInputElement>(null);
+  const [taskModal,    setTaskModal]    = useState(false);
+  const [editId,       setEditId]       = useState<string|null>(null);
+  const [tTitle,       setTTitle]       = useState("");
+  const [tNote,        setTNote]        = useState("");
+  const [tDue,         setTDue]         = useState("");
+  const [tTime,        setTTime]        = useState("");
+  const [tColor,       setTColor]       = useState<Color>("lilac");
+  const [tStarred,     setTStarred]     = useState(false);
+  const [tChecklist,   setTChecklist]   = useState<ChecklistItem[]>([]);
+  const [newCheckText, setNewCheckText] = useState("");
+  const titleRef    = useRef<HTMLInputElement>(null);
+  const newCheckRef = useRef<HTMLInputElement>(null);
 
   /* event modal */
   const [evModal,   setEvModal]   = useState(false);
@@ -324,24 +334,39 @@ export default function App() {
   }, []);
 
   /* ── task actions ── */
+  function openDetail(id: string) { setDetailId(id); }
+
   function openCreateTask() {
     setEditId(null); setTTitle(""); setTNote(""); setTDue(""); setTTime("");
-    setTColor("lilac"); setTStarred(false);
+    setTColor("lilac"); setTStarred(false); setTChecklist([]); setNewCheckText("");
     setTaskModal(true); setTimeout(()=>titleRef.current?.focus(),250);
   }
   function openEditTask(t: Task) {
     setEditId(t.id); setTTitle(t.title); setTNote(t.note);
     setTDue(t.due); setTTime(t.time); setTColor(t.color); setTStarred(t.starred);
+    setTChecklist(t.checklist ?? []); setNewCheckText("");
     setTaskModal(true); setTimeout(()=>titleRef.current?.focus(),250);
   }
   function saveTask() {
     const title = tTitle.trim(); if (!title) { titleRef.current?.focus(); return; }
+    const checklist = tChecklist.length ? tChecklist : undefined;
     if (editId) {
-      setTasks(prev => prev.map(t => t.id===editId ? {...t,title,note:tNote.trim(),due:tDue,time:tTime,color:tColor,starred:tStarred} : t));
+      setTasks(prev => prev.map(t => t.id===editId ? {...t,title,note:tNote.trim(),due:tDue,time:tTime,color:tColor,starred:tStarred,checklist} : t));
     } else {
-      setTasks(prev => [...prev,{id:uid(),title,note:tNote.trim(),due:tDue,time:tTime,col:"todo",color:tColor,starred:tStarred,created:Date.now()}]);
+      setTasks(prev => [...prev,{id:uid(),title,note:tNote.trim(),due:tDue,time:tTime,checklist,col:"todo",color:tColor,starred:tStarred,created:Date.now()}]);
     }
     setTaskModal(false);
+  }
+  function addCheckItem() {
+    const text = newCheckText.trim(); if (!text) return;
+    setTChecklist(prev => [...prev, {id:uid(),text,done:false}]);
+    setNewCheckText(""); setTimeout(()=>newCheckRef.current?.focus(),50);
+  }
+  function toggleCheckItem(taskId: string, itemId: string) {
+    setTasks(prev => prev.map(t => t.id===taskId ? {
+      ...t,
+      checklist: t.checklist?.map(c => c.id===itemId ? {...c,done:!c.done} : c)
+    } : t));
   }
   function deleteTask(id: string) { setTasks(prev=>prev.filter(t=>t.id!==id)); }
   function moveTaskDir(id: string, col: Col) { setTasks(prev=>prev.map(t=>t.id===id?{...t,col}:t)); }
@@ -536,7 +561,7 @@ export default function App() {
                           dropAfter={dropTarget?.id===t.id&&!dropTarget.before}
                           onStar={()=>setTasks(prev=>prev.map(x=>x.id===t.id?{...x,starred:!x.starred}:x))}
                           onDelete={()=>deleteTask(t.id)}
-                          onEdit={()=>openEditTask(t)}
+                          onEdit={()=>openDetail(t.id)}
                           onMoveSheet={()=>{setMoveId(t.id);setMoveModal(true);}}
                           onMovePrev={()=>{const ci=COLS.findIndex(c=>c.id===t.col);if(ci>0)moveTaskDir(t.id,COLS[ci-1].id);}}
                           onMoveNext={()=>{const ci=COLS.findIndex(c=>c.id===t.col);if(ci<COLS.length-1)moveTaskDir(t.id,COLS[ci+1].id);}}
@@ -583,7 +608,7 @@ export default function App() {
                           <TaskCard key={t.id} task={t}
                             onStar={()=>setTasks(prev=>prev.map(x=>x.id===t.id?{...x,starred:!x.starred}:x))}
                             onDelete={()=>deleteTask(t.id)}
-                            onEdit={()=>openEditTask(t)}
+                            onEdit={()=>openDetail(t.id)}
                             onMoveSheet={()=>{setMoveId(t.id);setMoveModal(true);}}
                             onMovePrev={()=>{const ci=COLS.findIndex(c=>c.id===t.col);if(ci>0)moveTaskDir(t.id,COLS[ci-1].id);}}
                             onMoveNext={()=>{const ci=COLS.findIndex(c=>c.id===t.col);if(ci<COLS.length-1)moveTaskDir(t.id,COLS[ci+1].id);}}
@@ -692,7 +717,7 @@ export default function App() {
                           const c=colorOf(t.color);
                           return <div key={t.id} className="cal-event task-ev"
                             style={{background:c.bg,borderLeft:`3px solid ${c.border}`,top:h*52,height:46}}
-                            onClick={e=>{e.stopPropagation();openEditTask(t);}}>
+                            onClick={e=>{e.stopPropagation();openDetail(t.id);}}>
                             <span className="ev-name">✓ {t.title}</span>
                             <span className="ev-time">{t.time}</span>
                           </div>;
@@ -728,7 +753,7 @@ export default function App() {
                           {items.slice(0,3).map(item=>(
                             <div key={item.key} className="mchip"
                               style={{background:item.c.bg,borderLeft:`2px solid ${item.c.border}`}}
-                              onClick={e=>{e.stopPropagation();item.isTask?openEditTask(item.obj as Task):openEditEvent(item.obj as CalEvent);}}>
+                              onClick={e=>{e.stopPropagation();item.isTask?openDetail((item.obj as Task).id):openEditEvent(item.obj as CalEvent);}}>
                               {item.isTask?"✓ ":""}{item.label}
                             </div>
                           ))}
@@ -800,6 +825,93 @@ export default function App() {
       </div>
     )}
 
+    {/* ══ TASK DETAIL ══ */}
+    <div className={`scrim${detailId?" open":""}`} onClick={e=>{if(e.target===e.currentTarget)setDetailId(null);}}>
+      <div className="sheet detail-sheet">
+        <div className="sheet-handle"/>
+        {detailTask && (
+          <>
+            {/* header row: close + edit */}
+            <div className="detail-top">
+              <button className="detail-close-btn" onClick={()=>setDetailId(null)} aria-label="Zavřít">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+              <span className="detail-status-badge" data-col={detailTask.col}>
+                {COLS.find(c=>c.id===detailTask.col)?.label}
+              </span>
+              <button className="detail-edit-btn" onClick={()=>{setDetailId(null);openEditTask(detailTask);}}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Upravit
+              </button>
+            </div>
+
+            {/* color accent bar */}
+            <div className="detail-color-bar" data-color={detailTask.color}/>
+
+            {/* title */}
+            <h2 className={`detail-title${detailTask.col==="done"?" done":""}`}>
+              {detailTask.starred && <span className="detail-star">⭐</span>}
+              {detailTask.title}
+            </h2>
+
+            {/* due date */}
+            {detailTask.due && (
+              <div className="detail-due">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
+                {friendlyDate(detailTask.due, detailTask.time||undefined)}
+              </div>
+            )}
+
+            {/* note */}
+            {detailTask.note && (
+              <div className="detail-note">{detailTask.note}</div>
+            )}
+
+            {/* checklist */}
+            {detailTask.checklist && detailTask.checklist.length > 0 && (
+              <div className="detail-checklist">
+                <div className="detail-section-label">
+                  Checklist
+                  <span className="detail-check-count">
+                    {detailTask.checklist.filter(c=>c.done).length}/{detailTask.checklist.length}
+                  </span>
+                </div>
+                <div className="checklist-progress">
+                  <div className="checklist-bar" style={{width:`${(detailTask.checklist.filter(c=>c.done).length/detailTask.checklist.length)*100}%`}}/>
+                </div>
+                {detailTask.checklist.map(item=>(
+                  <label key={item.id} className={`check-item${item.done?" done":""}`}>
+                    <input type="checkbox" checked={item.done} onChange={()=>toggleCheckItem(detailTask.id, item.id)}/>
+                    <span className="check-box">
+                      {item.done && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M5 13l4 4L19 7"/></svg>}
+                    </span>
+                    <span className="check-text">{item.text}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {/* column move */}
+            <div className="detail-move">
+              <div className="detail-section-label">Přesunout do</div>
+              <div className="detail-col-btns">
+                {COLS.map(c=>(
+                  <button key={c.id}
+                    className={`detail-col-btn${detailTask.col===c.id?" active":""}`}
+                    onClick={()=>moveTaskDir(detailTask.id, c.id)}
+                  >
+                    <span className="dot" style={{background:c.dot}}/>
+                    {c.short}
+                    {detailTask.col===c.id && <span className="detail-col-check">✓</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+
     {/* ══ TASK MODAL ══ */}
     <div className={`scrim${taskModal?" open":""}`} onClick={e=>{if(e.target===e.currentTarget)setTaskModal(false);}}>
       <div className="sheet">
@@ -842,6 +954,33 @@ export default function App() {
             </span>
           </button>
         </div>
+        {/* Checklist */}
+        <div className="field">
+          <label>Checklist <span className="field-hint">(volitelné)</span></label>
+          {tChecklist.map((item,i)=>(
+            <div key={item.id} className="cl-editor-item">
+              <span className={`cl-editor-dot${item.done?" done":""}`}/>
+              <span className={`cl-editor-text${item.done?" done":""}`}>{item.text}</span>
+              <button type="button" className="cl-editor-del" onClick={()=>setTChecklist(prev=>prev.filter(c=>c.id!==item.id))} aria-label="Odebrat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+          ))}
+          <div className="cl-editor-add">
+            <input
+              ref={newCheckRef}
+              type="text"
+              placeholder="Přidat položku…"
+              value={newCheckText}
+              onChange={e=>setNewCheckText(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addCheckItem();}}}
+            />
+            <button type="button" className="cl-add-btn" onClick={addCheckItem} disabled={!newCheckText.trim()}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          </div>
+        </div>
+
         <div className="sheet-actions">
           {editId && <button className="btn-secondary danger" onClick={()=>{deleteTask(editId);setTaskModal(false);}}>Smazat</button>}
           <button className="btn-secondary" onClick={()=>setTaskModal(false)}>Zrušit</button>
@@ -942,8 +1081,8 @@ function TaskCard({ task, dropBefore, dropAfter, onStar, onDelete, onEdit, onMov
       onDrop={onCardDrop}
       onDragEnd={onDragEnd}
       onTouchStart={()=>{tapStart.current=Date.now();}}
-      onTouchEnd={e=>{if(Date.now()-tapStart.current<500&&!(e.target as Element).closest("button"))onMoveSheet();}}
-      onDoubleClick={e=>{if(!(e.target as Element).closest("button"))onEdit();}}
+      onTouchEnd={e=>{if(Date.now()-tapStart.current<500&&!(e.target as Element).closest("button"))onEdit();}}
+      onClick={e=>{if(!(e.target as Element).closest("button")&&!(e.target as Element).closest("[draggable]")?.getAttribute("data-dragging"))onEdit();}}
     >
       <div className="star-badge"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.95 6 6.55.95-4.75 4.65 1.1 6.5L12 17.6l-5.85 3 1.1-6.5L2.5 9.45 9.05 8.5z"/></svg></div>
       <div className="card-head">
