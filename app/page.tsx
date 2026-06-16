@@ -11,6 +11,7 @@ interface Task {
   id: string; title: string; note: string;
   due: string; time: string;
   col: Col; color: Color; starred: boolean; created: number;
+  order?: number;
 }
 interface CalEvent {
   id: string; title: string; date: string;
@@ -115,6 +116,60 @@ function seedEvents(): CalEvent[] {
 }
 
 /* ═══════════ SUB-COMPONENTS ═══════════ */
+/* ═══════════ LOGO COMPONENTS ═══════════ */
+function LlamaMark({ size = 40, tone = "color" }: { size?: number; tone?: "color"|"white"|"ink" }) {
+  const filters = { color:"none", white:"brightness(0) invert(1)", ink:"brightness(0) saturate(0%) opacity(0.9)" };
+  return (
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"
+      width={size} height={size}
+      style={{ display:"block", filter:filters[tone], overflow:"visible", flexShrink:0 }}>
+      <defs>
+        <linearGradient id={`lamaFur-${tone}`} x1="0.15" y1="0" x2="0.85" y2="1">
+          <stop offset="0"    stopColor="#cdb8ee"/>
+          <stop offset="0.38" stopColor="#e1a4d6"/>
+          <stop offset="0.72" stopColor="#aa7cdb"/>
+          <stop offset="1"    stopColor="#825fcc"/>
+        </linearGradient>
+      </defs>
+      <path fillRule="evenodd" fill={tone==="color" ? `url(#lamaFur-${tone})` : "currentColor"} d="
+        M37 15 C35 8 39 4 44 6 C47 8 48 13 48 19
+        C50 15 52 12 55 11 C59 9 63 12 63 18
+        C64 22 63 27 64 31 C70 32 77 37 83 44
+        C86 47 85 52 81 53 C83 56 79 59 74 60
+        C72 63 71 66 70 69 C69 76 68 82 66 88
+        C56 91 46 90 39 86 C33 84 28 80 35 77
+        C30 75 26 70 35 67 C30 65 26 60 36 57
+        C31 55 27 50 37 47 C32 45 28 39 38 37
+        C35 32 35 25 36 20 C36 18 36 16 37 15 Z
+        M64 34 C60 38 59 43 60 47 C57 49 54 51 54 55
+        C55 58 59 60 64 60 C69 60 73 58 76 56
+        C79 54 80 51 79 49 C76 46 71 44 68 44
+        C67 41 66 36 64 34 Z"/>
+      <path d="M67 56 C70 57 73 56 76 54" fill="none" stroke={tone==="color"?"#9a6fd0":"currentColor"} strokeWidth="1.6" strokeLinecap="round"/>
+      <circle cx="61" cy="45" r="3.4" fill={tone==="color"?"#6a4ab0":"currentColor"}/>
+    </svg>
+  );
+}
+
+function LlamaWordmark({ size = 20 }: { size?: number }) {
+  return (
+    <span style={{ display:"inline-flex", alignItems:"center", fontWeight:700, fontSize:size, letterSpacing:"-0.03em", lineHeight:1 }}>
+      <span style={{ color:"#7d56c0" }}>lama</span>
+      <span style={{
+        display:"inline-flex", width:"0.58em", height:"0.58em",
+        borderRadius:"0.16em", background:"#3a57b4", flexShrink:0,
+        alignItems:"center", justifyContent:"center",
+        margin:"0 0.18em", transform:"translateY(-0.02em)",
+      }}>
+        <svg width="62%" height="62%" viewBox="0 0 24 24">
+          <path d="M5 13 l4 4 l10 -11" fill="none" stroke="#fff" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </span>
+      <span style={{ color:"#2a2540" }}>todo</span>
+    </span>
+  );
+}
+
 function StarSvg({ filled }: { filled: boolean }) {
   return (
     <svg viewBox="0 0 24 24" fill={filled?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
@@ -198,8 +253,10 @@ export default function App() {
   const [reminder, setReminder] = useState<ReminderAlert|null>(null);
   const notifiedRef = useRef<Set<string>>(new Set());
 
-  /* drag */
+  /* drag-to-reorder */
+  const dragState = useRef<{ id: string; col: Col } | null>(null);
   const dragId = useRef<string|null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; before: boolean } | null>(null);
 
   /* ── init ── */
   useEffect(() => {
@@ -288,6 +345,41 @@ export default function App() {
   }
   function deleteTask(id: string) { setTasks(prev=>prev.filter(t=>t.id!==id)); }
   function moveTaskDir(id: string, col: Col) { setTasks(prev=>prev.map(t=>t.id===id?{...t,col}:t)); }
+
+  function handleDragStart(id: string, col: Col) {
+    dragId.current = id;
+    dragState.current = { id, col };
+    setDropTarget(null);
+  }
+  function handleCardDragOver(e: React.DragEvent, targetId: string) {
+    e.preventDefault(); e.stopPropagation();
+    if (!dragState.current || dragState.current.id === targetId) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const before = e.clientY < rect.top + rect.height / 2;
+    setDropTarget(prev => (prev?.id === targetId && prev?.before === before) ? prev : { id: targetId, before });
+  }
+  function handleCardDrop(e: React.DragEvent, targetId: string, targetCol: Col) {
+    e.preventDefault(); e.stopPropagation();
+    if (!dragState.current) return;
+    const { id: draggedId } = dragState.current;
+    if (draggedId === targetId) { setDropTarget(null); return; }
+    const before = dropTarget?.before ?? true;
+    setTasks(prev => {
+      const dragged = prev.find(t=>t.id===draggedId); if (!dragged) return prev;
+      let list = prev.filter(t=>t.id!==draggedId);
+      const ti = list.findIndex(t=>t.id===targetId); if (ti===-1) return prev;
+      list.splice(before ? ti : ti+1, 0, { ...dragged, col: targetCol });
+      const base = Date.now(); let ci = 0;
+      return list.map(t => t.col===targetCol ? {...t, order: base + (ci++)*100} : t);
+    });
+    dragState.current = null; dragId.current = null; setDropTarget(null);
+  }
+  function handleColumnDrop(e: React.DragEvent, col: Col) {
+    if ((e.target as Element).closest('.card')) return;
+    if (!dragState.current) return;
+    moveTaskDir(dragState.current.id, col);
+    dragState.current = null; dragId.current = null; setDropTarget(null);
+  }
 
   /* ── event actions ── */
   function openCreateEvent(date?: Date, hour?: number) {
@@ -379,8 +471,8 @@ export default function App() {
   /* ── sorted tasks ── */
   function sorted(col: Col) {
     return tasks.filter(t=>t.col===col).sort((a,b)=>{
-      if (col==="todo" && a.starred!==b.starred) return (b.starred?1:0)-(a.starred?1:0);
-      return b.created-a.created;
+      if (a.starred !== b.starred) return (b.starred?1:0)-(a.starred?1:0);
+      return (a.order ?? a.created) - (b.order ?? b.created);
     });
   }
   const counts = { all:tasks.length, todo:0, doing:0, done:0 };
@@ -395,9 +487,9 @@ export default function App() {
 
       {/* Desktop header */}
       <header>
-        <div className="header-mascot">🦙</div>
+        <LlamaMark size={32} tone="color"/>
         <div className="header-brand">
-          <h1>Lama To-Do</h1>
+          <LlamaWordmark size={16}/>
           <p>{greeting}</p>
         </div>
       </header>
@@ -426,9 +518,8 @@ export default function App() {
               return (
                 <div key={col.id} className="column" data-col={col.id}
                   style={{ display: show?"":"none" }}
-                  onDragOver={e=>{e.preventDefault();(e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.add("drag-over");}}
-                  onDragLeave={e=>{(e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.remove("drag-over");}}
-                  onDrop={e=>{e.preventDefault();(e.currentTarget.querySelector(".column-list") as HTMLElement)?.classList.remove("drag-over");if(dragId.current)moveTaskDir(dragId.current,col.id);dragId.current=null;}}
+                  onDragOver={e=>e.preventDefault()}
+                  onDrop={e=>handleColumnDrop(e, col.id)}
                 >
                   <div className="column-head">
                     <span>{col.label}</span>
@@ -436,16 +527,23 @@ export default function App() {
                   </div>
                   <div className="column-list">
                     {items.length===0
-                      ? <div className="empty-col">{col.id==="todo"?"Žádné úkoly":col.id==="doing"?"Teď nic neběží":"Zatím nic hotového"}</div>
+                      ? <div className="empty-col" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(dragState.current){moveTaskDir(dragState.current.id,col.id);dragState.current=null;dragId.current=null;}}}>
+                          {col.id==="todo"?"Přetáhni sem nebo přidej úkol":col.id==="doing"?"Teď nic neběží":"Zatím nic hotového"}
+                        </div>
                       : items.map(t=>(
                         <TaskCard key={t.id} task={t}
+                          dropBefore={dropTarget?.id===t.id&&dropTarget.before}
+                          dropAfter={dropTarget?.id===t.id&&!dropTarget.before}
                           onStar={()=>setTasks(prev=>prev.map(x=>x.id===t.id?{...x,starred:!x.starred}:x))}
                           onDelete={()=>deleteTask(t.id)}
                           onEdit={()=>openEditTask(t)}
                           onMoveSheet={()=>{setMoveId(t.id);setMoveModal(true);}}
                           onMovePrev={()=>{const ci=COLS.findIndex(c=>c.id===t.col);if(ci>0)moveTaskDir(t.id,COLS[ci-1].id);}}
                           onMoveNext={()=>{const ci=COLS.findIndex(c=>c.id===t.col);if(ci<COLS.length-1)moveTaskDir(t.id,COLS[ci+1].id);}}
-                          onDragStart={()=>{dragId.current=t.id;}}
+                          onDragStart={()=>handleDragStart(t.id, col.id)}
+                          onCardDragOver={e=>handleCardDragOver(e, t.id)}
+                          onCardDrop={e=>handleCardDrop(e, t.id, col.id)}
+                          onDragEnd={()=>{dragState.current=null;dragId.current=null;setDropTarget(null);}}
                         />
                       ))
                     }
@@ -480,7 +578,7 @@ export default function App() {
                     </div>
                     <div className="column-list">
                       {items.length===0
-                        ? <div className="empty-col">Žádné</div>
+                        ? <div className="empty-col">Žádné na dnes</div>
                         : items.map(t=>(
                           <TaskCard key={t.id} task={t}
                             onStar={()=>setTasks(prev=>prev.map(x=>x.id===t.id?{...x,starred:!x.starred}:x))}
@@ -489,7 +587,10 @@ export default function App() {
                             onMoveSheet={()=>{setMoveId(t.id);setMoveModal(true);}}
                             onMovePrev={()=>{const ci=COLS.findIndex(c=>c.id===t.col);if(ci>0)moveTaskDir(t.id,COLS[ci-1].id);}}
                             onMoveNext={()=>{const ci=COLS.findIndex(c=>c.id===t.col);if(ci<COLS.length-1)moveTaskDir(t.id,COLS[ci+1].id);}}
-                            onDragStart={()=>{dragId.current=t.id;}}
+                            onDragStart={()=>handleDragStart(t.id, col.id)}
+                            onCardDragOver={e=>handleCardDragOver(e, t.id)}
+                            onCardDrop={e=>handleCardDrop(e, t.id, col.id)}
+                            onDragEnd={()=>{dragState.current=null;dragId.current=null;setDropTarget(null);}}
                           />
                         ))
                       }
@@ -647,9 +748,9 @@ export default function App() {
       <nav className="tabbar">
         {/* Desktop branding */}
         <div className="sidebar-top">
-          <div className="sidebar-mascot">🦙</div>
+          <LlamaMark size={36} tone="color"/>
           <div>
-            <div className="sidebar-name">Lama To-Do</div>
+            <LlamaWordmark size={14}/>
             <div className="sidebar-greet">{greeting}</div>
           </div>
         </div>
@@ -811,10 +912,15 @@ export default function App() {
 }
 
 /* ═══════════ TASK CARD ═══════════ */
-function TaskCard({ task, onStar, onDelete, onEdit, onMoveSheet, onMovePrev, onMoveNext, onDragStart }:{
+function TaskCard({ task, dropBefore, dropAfter, onStar, onDelete, onEdit, onMoveSheet, onMovePrev, onMoveNext, onDragStart, onCardDragOver, onCardDrop, onDragEnd }:{
   task: Task;
+  dropBefore?: boolean; dropAfter?: boolean;
   onStar:()=>void; onDelete:()=>void; onEdit:()=>void;
-  onMoveSheet:()=>void; onMovePrev:()=>void; onMoveNext:()=>void; onDragStart:()=>void;
+  onMoveSheet:()=>void; onMovePrev:()=>void; onMoveNext:()=>void;
+  onDragStart:()=>void;
+  onCardDragOver?:(e:React.DragEvent)=>void;
+  onCardDrop?:(e:React.DragEvent)=>void;
+  onDragEnd?:()=>void;
 }) {
   const colIdx = COLS.findIndex(c=>c.id===task.col);
   const tapStart = useRef(0);
@@ -828,8 +934,13 @@ function TaskCard({ task, onStar, onDelete, onEdit, onMoveSheet, onMovePrev, onM
   }
 
   return (
-    <div className="card" data-color={task.color}
-      draggable onDragStart={onDragStart}
+    <div className={`card${dropBefore?" drop-before":""}${dropAfter?" drop-after":""}`}
+      data-color={task.color}
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onCardDragOver}
+      onDrop={onCardDrop}
+      onDragEnd={onDragEnd}
       onTouchStart={()=>{tapStart.current=Date.now();}}
       onTouchEnd={e=>{if(Date.now()-tapStart.current<500&&!(e.target as Element).closest("button"))onMoveSheet();}}
       onDoubleClick={e=>{if(!(e.target as Element).closest("button"))onEdit();}}
